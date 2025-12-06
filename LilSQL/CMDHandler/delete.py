@@ -160,7 +160,6 @@ def delete_row_values(cmd):
         print("INVALID VALUE GROUP.")
         return
 
-    # --- PROCESS EACH DELETE TARGET ---
     for target in parsed:
 
         if len(target) != col_count:
@@ -170,15 +169,13 @@ def delete_row_values(cmd):
         for index, row in enumerate(data):
             match = True
 
-            # ----------- FIXED MATCH LOGIC -----------
             for col, dtype, val in zip(schema_cols, schema_types, target):
 
-                if val == "_":   # skip match
+                if val == "_":  
                     continue
 
                 row_val = row[col]
 
-                # compare properly based on type
                 if dtype == "null":
                     if not (row_val is None and val.lower() == "null"):
                         match = False
@@ -221,11 +218,9 @@ def delete_row_values(cmd):
                 else:
                     match = False
                     break
-            # ----------- END MATCH LOGIC --------------
 
             if match:
 
-                # Determine if deleting whole row
                 all_deleted = True
                 for val in target:
                     if val == "_":
@@ -235,12 +230,10 @@ def delete_row_values(cmd):
                 if all_deleted:
                     data[index] = None
                 else:
-                    # delete only specified cols (set None)
                     for col, val in zip(schema_cols, target):
                         if val != "_":
                             row[col] = None
 
-    # remove fully deleted rows
     table["data"] = [r for r in data if r is not None]
 
     with open(tb_path, "w") as f:

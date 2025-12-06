@@ -18,5 +18,3 @@ def use_main(cmd):
     if cmd[1] != "":
         use_database(cmd[1])
 
-
-#How will i disconnect from a database?
