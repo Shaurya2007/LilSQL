@@ -1,44 +1,39 @@
-#This will contain functions to create(and connect incase of db's) databases and tables
 import os
 import json
 import state
-
+import error
 
 
 def create_database(db_name):
 
+    # PARSE
     invalid_name = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
 
-    if db_name.strip() == "":
-        print("INVALID DATABASE NAME.")
-        return
-
-    if db_name[0] == "-":
-        print("INVALID DATABASE NAME.")
-        return
-
+    # VALIDATE
     if state.curr_db is not None:
-        print("CANNOT CREATE DATABASE WHILE USING ANOTHER DATABASE.")
+        error.errorType("LS_201")
+        return
+    
+    if db_name.strip() == "" or db_name[0] == "-" or any(char in db_name for char in invalid_name):
+        error.errorType("LS_001")           
         return
 
-    if any(char in db_name for char in invalid_name):
-        print("INVALID DATABASE NAME.")
-        return
-
+    # EXECUTE
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     db_path = os.path.join(base_dir, "Database", db_name)
 
-    if not os.path.exists(db_path):
-        os.makedirs(db_path)
-        print(f"DATABASE '{db_name}' CREATED.")
-    else:
-        print("DATABASE ALREADY EXISTS.")
-
-
+    if os.path.exists(db_path):
+        error.errorType("LS_301")
+        return
+    
+    # PERSIST
+    os.makedirs(db_path)
+    print(f"DATABASE '{db_name}' CREATED.")
 
 
 def create_table(cmd):
 
+    # PARSE
     tb_name = cmd[1][1:].strip()
     tar_dir = os.path.join(state.curr_dir, f"{tb_name}.json")
 
@@ -46,30 +41,32 @@ def create_table(cmd):
     ref_schema_values = [v.strip() for v in raw_schema_values.split(",")]
 
     schema_values = {}
-    valid_types = {"int", "float", "string", "bool", "null", "num"}
+    valid_types = {"int", "float", "bool", "string", "null"}
     invalid_name = ['/','\\','\\',':','*','?','"','<','>','|']
 
-    new_cols = []  
+    new_cols = []
 
+    # VALIDATE
     for v in ref_schema_values:
-        if ":" in v:
-            col, dtype = v.split(":", 1)
-            col = col.strip()
-            dtype = dtype.strip()
-
-            if dtype not in valid_types:
-                print(f"INVALID DATA TYPE '{dtype}' FOR COLUMN '{col}'.")
-                return
-
-            new_cols.append((col, dtype))
-        else:
-            print("INVALID SCHEMA FORMAT.")
+        if ":" not in v:
+            error.errorType("LS_005")
             return
 
+        col, dtype = v.split(":", 1)
+        col = col.strip()
+        dtype = dtype.strip()
+
+        if dtype not in valid_types:
+            error.errorType("LS_006")
+            return
+
+        new_cols.append((col, dtype))
+
+    # EXECUTE
     if not os.path.exists(tar_dir):
 
         if any(char in tb_name for char in invalid_name):
-            print("INVALID TABLE NAME.")
+            error.errorType("LS_002")
             return
 
         for col, dtype in new_cols:
@@ -80,6 +77,7 @@ def create_table(cmd):
             "data": []
         }
 
+        # PERSIST
         with open(tar_dir, "w") as f:
             json.dump(new_table, f, indent=4)
 
@@ -93,34 +91,35 @@ def create_table(cmd):
         schema = table["schema"]
         data = table["data"]
 
+        # VALIDATE
         for col, dtype in new_cols:
 
             col = col.strip()
 
             if any(char in col for char in invalid_name):
-                print("INVALID COLUMN NAME.")
+                error.errorType("LS_003")
                 return
             
             if col in schema:
-                print(f"COLUMN '{col}' ALREADY EXISTS.")
+                error.errorType("LS_306")
                 return
 
+            # EXECUTE 
             schema[col] = dtype  
 
             for row in data:
-                if dtype == "int":
+                if dtype == valid_types[0]:
                     row[col] = 0
-                elif dtype == "float":
+                elif dtype == valid_types[1]:
                     row[col] = 0.0
-                elif dtype == "string":
-                    row[col] = ""
-                elif dtype == "bool":
+                elif dtype == valid_types[2]:
                     row[col] = False
-                elif dtype == "null":
+                elif dtype == valid_types[3]:
+                    row[col] = ""
+                elif dtype == valid_types[4]:
                     row[col] = None
-                elif dtype == "num":
-                    row[col] = 0
 
+        # PERSIST
         with open(tar_dir, "w") as f:
             json.dump(table, f, indent=4)
 
@@ -128,22 +127,28 @@ def create_table(cmd):
         return
 
 
-
-
 def create_columnvalues(cmd):
 
+    # PARSE
     tb_name = cmd[1][1:].strip()
     tar_dir = os.path.join(state.curr_dir, f"{tb_name}.json")
-
+    valid_types = {"int", "float", "bool", "string", "null"}
     raw_values = " ".join(cmd[3:]).strip()
+
     rows_raw = []
     current = ""
     inside = False
 
-    if not raw_values:
-        print("EMPTY VALUE GROUP.")
+    # VALIDATE
+    if cmd[2].lower() != "values" or not raw_values:
+        error.errorType("LS_100")
         return
 
+    if not os.path.exists(tar_dir):
+        error.errorType("LS_302")
+        return
+
+    # PARSE
     for char in raw_values:
         if char == '(':
             inside = True
@@ -159,10 +164,7 @@ def create_columnvalues(cmd):
         vals = [v.strip().strip("'").strip('"') for v in raw.split(",")]
         parsed_rows.append(vals)
 
-    if not os.path.exists(tar_dir):
-        print("TABLE DOES NOT EXIST.")
-        return
-
+    # EXECUTE
     with open(tar_dir, 'r') as f:
         table = json.load(f)
 
@@ -175,10 +177,10 @@ def create_columnvalues(cmd):
     for vals in parsed_rows:
 
         while len(vals) < col_count:
-            vals.append("") 
+            vals.append("")
 
         if len(vals) > col_count:
-            print("VALUE COUNT MISMATCH.")
+            error.errorType("LS_402")
             return
 
         new_row = {}
@@ -189,43 +191,37 @@ def create_columnvalues(cmd):
                 continue
 
             try:
-                if dtype == "int":
+                if dtype == valid_types[0]:
                     new_row[col] = int(val)
-
-                elif dtype == "float":
+                elif dtype == valid_types[1]:
                     new_row[col] = float(val)
-
-                elif dtype == "bool":
+                elif dtype == valid_types[2]:
                     lower = val.lower()
                     if lower in ("true", "1"):
                         new_row[col] = True
+                        continue
                     elif lower in ("false", "0"):
                         new_row[col] = False
-                    else:
-                        print(f"TYPE MISMATCH FOR COLUMN '{col}'. EXPECTED 'bool'.")
-                        return
-
-                elif dtype == "string":
-                    new_row[col] = str(val)
-
-                elif dtype == "null":
-                    if val.lower() == "null":
-                        new_row[col] = None
-                    else:
-                        print(f"TYPE MISMATCH FOR COLUMN '{col}'. EXPECTED 'null'.")
-                        return
-
-                else:
-                    print(f"UNKNOWN DATA TYPE '{dtype}' FOR COLUMN '{col}'.")
+                        continue
+                    
+                    error.errorType("LS_006")
                     return
+                elif dtype == valid_types[3]:
+                    new_row[col] = str(val)
+                elif dtype == valid_types[4]:
+                    if val.lower() != "null":
+                        error.errorType("LS_006")
+                        return
+                    new_row[col] = None
 
-            except ValueError:
-                print(f"TYPE MISMATCH FOR COLUMN '{col}'.")
+            except Exception:
+                error.errorType("LS_006")
                 return
 
         data.append(new_row)
         inserted += 1
 
+    # PERSIST
     with open(tar_dir, "w") as f:
         json.dump(table, f, indent=4)
 
@@ -233,25 +229,30 @@ def create_columnvalues(cmd):
 
 
 def create_main(cmd):
-    try:
-        if len(cmd) < 2:
-            print("INCOMPLETE COMMAND.")
-            return
 
+    # VALIDATE
+    if not state.check_state():
+        return
+
+    try:
+        # PARSE
         name = cmd[1]
 
+        # VALIDATE
         if name[0] != "-":
-            if len(cmd) == 2:
-                create_database(name)
+            if len(cmd) != 2:
+                error.errorType("LS_000")
                 return
-            else:
-                print("INVALID COMMAND FORMAT.")
-                return
+            
+            # EXECUTE + PERSIST
+            create_database(name)
+            return            
 
         if state.curr_db is None:
-            print("NO DATABASE SELECTED.")
+            error.errorType("LS_200")
             return
 
+        # PARSE
         if len(cmd) > 2 and cmd[2].lower() == "values":
             create_columnvalues(cmd)
             return
@@ -260,4 +261,4 @@ def create_main(cmd):
         return
 
     except IndexError:
-        print("INCOMPLETE COMMAND.")
+        error.errorType("LS_100")

@@ -1,78 +1,84 @@
 import os
 import json
 import state
-
+import error
 
 
 def delete_database(cmd):
 
+    # PARSE
     db_name = cmd[1].strip()
 
+    # VALIDATE
     if state.curr_db != db_name:
-        print("YOU MUST BE USING THE DATABASE TO DELETE IT.")
+        error.not_connected()
         return
 
     if not state.curr_dir or not os.path.exists(state.curr_dir):
-        print("DATABASE DOES NOT EXIST.")
+        error.errorType("LS_300")
         return
 
+    # EXECUTE
     try:
         for file in os.listdir(state.curr_dir):
             os.remove(os.path.join(state.curr_dir, file))
 
         os.rmdir(state.curr_dir)
 
+        # PERSIST
         print(f"DATABASE '{db_name}' DELETED.")
         state.curr_db = None
         state.curr_dir = None
 
-    except:
-        print("FAILED TO DELETE DATABASE.")
-
-
+    except Exception:
+        error.errorType("LS_500")
 
 
 def delete_table(cmd):
 
+    # PARSE
     db_name = cmd[1]
     tb_name = cmd[3]
 
+    # VALIDATE
     if state.curr_db != db_name:
-        print("YOU MUST BE USING THE DATABASE TO DELETE TABLES.")
+        error.errorType("LS_200")
         return
 
     tb_path = os.path.join(state.curr_dir, f"{tb_name}.json")
 
     if not os.path.exists(tb_path):
-        print("TABLE DOES NOT EXIST.")
+        error.errorType("LS_302")
         return
 
+    # EXECUTE + PERSIST
     try:
         os.remove(tb_path)
         print(f"TABLE '{tb_name}' DELETED.")
 
-    except:
-        print("FAILED TO DELETE TABLE.")
-
-
+    except Exception:
+        error.errorType("LS_501")
 
 
 def delete_columns(cmd):
 
+    # PARSE
     tb_name = cmd[1][1:].strip()
     tb_path = os.path.join(state.curr_dir, f"{tb_name}.json")
 
+    # VALIDATE
     if not os.path.exists(tb_path):
-        print("TABLE DOES NOT EXIST.")
+        error.errorType("LS_302")
         return
 
     if "(" in cmd[2] or ")" in cmd[2]:
-        print("INVALID COLUMN NAME PARENTHESES.")
+        error.errorType("LS_000")
         return
 
     raw = " ".join(cmd[2:])
     cols = [c.strip() for c in raw.split(",")]
 
+    # EXECUTE
     with open(tb_path, "r") as f:
         table = json.load(f)
 
@@ -85,12 +91,12 @@ def delete_columns(cmd):
         if c == "_" or c == "":
             continue
         if c not in schema:
-            print(f"COLUMN '{c}' DOES NOT EXIST.")
+            error.errorType("LS_305")
             return
         delete_list.append(c)
 
     if not delete_list:
-        print("NO VALID COLUMNS TO DELETE.")
+        error.errorType("LS_502")
         return
 
     for c in delete_list:
@@ -100,25 +106,27 @@ def delete_columns(cmd):
         for c in delete_list:
             row.pop(c, None)
 
+    # PERSIST
     with open(tb_path, "w") as f:
         json.dump(table, f, indent=4)
 
     print("COLUMNS DELETED.")
 
 
-
-
 def delete_row_values(cmd):
 
+    # PARSE
     tb_name = cmd[1][1:].strip()
     tb_path = os.path.join(state.curr_dir, f"{tb_name}.json")
 
+    # VALIDATE
     if not os.path.exists(tb_path):
-        print("TABLE DOES NOT EXIST.")
+        error.errorType("LS_302")
         return
 
     raw = " ".join(cmd[3:]).strip()
 
+    # EXECUTE
     with open(tb_path, "r") as f:
         table = json.load(f)
 
@@ -128,15 +136,16 @@ def delete_row_values(cmd):
     col_count = len(schema_cols)
     data = table["data"]
 
-    # Delete ALL rows
     if raw == "":
         table["data"] = []
+
+        # PERSIST 
         with open(tb_path, "w") as f:
             json.dump(table, f, indent=4)
+
         print("ALL ROWS DELETED.")
         return
 
-    # Parse (...) groups
     rows_raw = []
     inside = False
     current = ""
@@ -156,14 +165,14 @@ def delete_row_values(cmd):
         vals = [v.strip().strip('"').strip("'") for v in r.split(",")]
         parsed.append(vals)
 
+    # VALIDATE
     if not parsed:
-        print("INVALID VALUE GROUP.")
+        error.errorType("LS_004")
         return
 
     for target in parsed:
-
         if len(target) != col_count:
-            print("VALUE COUNT MISMATCH.")
+            error.errorType("LS_402")
             return
 
         for index, row in enumerate(data):
@@ -171,7 +180,7 @@ def delete_row_values(cmd):
 
             for col, dtype, val in zip(schema_cols, schema_types, target):
 
-                if val == "_":  
+                if val == "_":
                     continue
 
                 row_val = row[col]
@@ -186,7 +195,7 @@ def delete_row_values(cmd):
                         if int(row_val) != int(val):
                             match = False
                             break
-                    except:
+                    except Exception:
                         match = False
                         break
 
@@ -195,7 +204,7 @@ def delete_row_values(cmd):
                         if float(row_val) != float(val):
                             match = False
                             break
-                    except:
+                    except Exception:
                         match = False
                         break
 
@@ -206,7 +215,7 @@ def delete_row_values(cmd):
                         if row_bool != tgt_bool:
                             match = False
                             break
-                    except:
+                    except Exception:
                         match = False
                         break
 
@@ -236,23 +245,28 @@ def delete_row_values(cmd):
 
     table["data"] = [r for r in data if r is not None]
 
+    # PERSIST
     with open(tb_path, "w") as f:
         json.dump(table, f, indent=4)
 
     print("ROW VALUES DELETED.")
 
 
-
-
-
 def delete_main(cmd):
+
+    # VALIDATE
+    if not state.check_state():
+        return
+
     try:
 
         if state.curr_db is None:
-            print("NO DATABASE SELECTED.")
+            error.errorType("LS_200")
             return
 
+        # PARSE
         if cmd[1][0] != "-":
+
             if len(cmd) == 2:
                 delete_database(cmd)
                 return
@@ -261,9 +275,10 @@ def delete_main(cmd):
                 delete_table(cmd)
                 return
 
-            print("INVALID COMMAND FORMAT.")
+            error.errorType("LS_000")
             return
 
+        # PARSE + VALIDATE
         if len(cmd) >= 3 and cmd[2].lower() != "values":
             delete_columns(cmd)
             return
@@ -272,7 +287,8 @@ def delete_main(cmd):
             delete_row_values(cmd)
             return
 
-        print("INVALID COMMAND FORMAT.")
+        error.errorType("LS_000")
 
-    except:
-        print("INCOMPLETE COMMAND.")
+    except Exception:
+        error.errorType("LS_100")
+

@@ -1,56 +1,60 @@
 import os
 import json
 import state
-
+import error
 
 
 def update_db(cmd):
 
+    # PARSE
     old_path = state.curr_dir
     new_path = os.path.join(os.path.dirname(state.curr_dir), cmd[2])
 
+    # VALIDATE
     if state.curr_db is None or state.curr_dir is None:
-        print("NO DATABASE SELECTED.")
+        error.errorType("LS_200")
         return
 
     if len(cmd) < 3 or not cmd[2]:
-        print("INCOMPLETE COMMAND.")
+        error.errorType("LS_100")
         return
     
-    if os.path.exists(old_path):
-        os.rename(old_path, new_path)
-        print(f"DATABASE RENAMED TO '{cmd[2]}'.")
+    if not os.path.exists(old_path):
+        error.errorType("LS_200")
+        return
 
-        state.curr_db = cmd[2]
-        state.curr_dir = new_path
-
-    else:
-        print("DATABASE DOES NOT EXIST OR DATABASE NOT CONNECTED.")
-
+    # PERSIST
+    os.rename(old_path, new_path)
+    print(f"DATABASE RENAMED TO '{cmd[2]}'.")
+    state.curr_db = cmd[2]
+    state.curr_dir = new_path
 
 
 def update_tablename(cmd):
 
+    # PARSE
     old_tb_names = [table[:-5] for table in os.listdir(state.curr_dir) if table.endswith(".json")]
     curr_name = " ".join(cmd[3:]).strip()
     new_tb_names = [v.strip() for v in curr_name.split(",")]
     invalid_name = ['/','\\',':','*','?','"','<','>','|']
 
+    # VALIDATE
     if state.curr_db is None:
-        print("NO DATABASE SELECTED.")
+        error.errorType("LS_200")
         return
 
     if len(old_tb_names) < len(new_tb_names):
-        print("MISMATCH IN TABLE COUNT.")
+        error.errorType("LS_402")
         return
 
     for nm in new_tb_names:
         if nm == "_":
             continue
         if any(ch in nm for ch in invalid_name) or nm == "":
-            print(f"INVALID TABLE NAME '{nm}'.")
+            error.errorType("LS_002")
             return
 
+    # EXECUTE + PERSIST
     for i in range(len(new_tb_names)):
         new_name = new_tb_names[i]
         old_name = old_tb_names[i]
@@ -62,11 +66,11 @@ def update_tablename(cmd):
         new_path = os.path.join(state.curr_dir, f"{new_name}.json")
 
         if not os.path.exists(old_path):
-            print("TABLE DOES NOT EXIST.")
+            error.errorType("LS_302")
             return
 
         if os.path.exists(new_path):
-            print(f"TABLE '{new_name}' ALREADY EXISTS.")
+            error.errorType("LS_303")
             return
 
         os.rename(old_path, new_path)
@@ -75,19 +79,18 @@ def update_tablename(cmd):
     print("TABLE RENAMING COMPLETED.")
 
 
-
-
-
 def update_columnname(cmd):
 
+    # PARSE
     raw_values = " ".join(cmd[2:])
     new_col_names = [v.strip() for v in raw_values.split(",")]
     invalid_chars = set(['/','\\',':','*','?','"',"'",'<','>','|'])
     cleaned = []
     seen = set()
 
+    # VALIDATE
     if "(" in raw_values or ")" in raw_values:
-        print("INVALID COLUMN NAME PARENTHESES.")
+        error.errorType("LS_003")
         return
     
     for nm in new_col_names:
@@ -97,16 +100,12 @@ def update_columnname(cmd):
             cleaned.append("_")
             continue
 
-        if nm == "":
-            print("INVALID COLUMN NAME ''.")
-            return
-
-        if any(ch in nm for ch in invalid_chars):
-            print(f"INVALID COLUMN NAME '{nm}'.")
+        if nm == "" or any(ch in nm for ch in invalid_chars):
+            error.errorType("LS_003")
             return
 
         if nm in seen:
-            print(f"DUPLICATE COLUMN NAME '{nm}'.")
+            error.errorType("LS_304")
             return
 
         seen.add(nm)
@@ -118,39 +117,36 @@ def update_columnname(cmd):
     tar_dir = os.path.join(state.curr_dir, f"{tb_name}.json")
 
     if not os.path.exists(tar_dir):
-        print("TABLE DOES NOT EXIST.")
+        error.errorType("LS_302")
         return
 
+    # EXECUTE
     with open(tar_dir, 'r') as f:
         table = json.load(f)
 
     schema = table["schema"]
     data = table["data"]
     schema_items = list(schema.items()) 
-    new_col_count = len(new_col_names)
-    old_col_count = len(schema_items)
 
-    if new_col_count > old_col_count:
-        print("MISMATCH IN COLUMN COUNT.")
+    if len(new_col_names) > len(schema_items):
+        error.errorType("LS_402")
         return
-    
+
     new_schema = {}
 
     for (col, dtype), new_name in zip(schema_items, new_col_names):
-
-        if new_name == "_":  
+        if new_name == "_":
             new_schema[col] = dtype
         else:
             new_schema[new_name] = dtype
 
-    if new_col_count < old_col_count:
-        for col, dtype in schema_items[new_col_count:]:
+    if len(new_col_names) < len(schema_items):
+        for col, dtype in schema_items[len(new_col_names):]:
             new_schema[col] = dtype
 
     new_data = []
 
     for row in data:
-
         new_row = {}
 
         for (col, dtype), new_name in zip(schema_items, new_col_names):
@@ -159,12 +155,13 @@ def update_columnname(cmd):
             else:
                 new_row[new_name] = row[col]
 
-        if new_col_count < old_col_count:
-            for col, dtype in schema_items[new_col_count:]:
+        if len(new_col_names) < len(schema_items):
+            for col, dtype in schema_items[len(new_col_names):]:
                 new_row[col] = row[col]
 
         new_data.append(new_row)
 
+    # PERSIST
     table["schema"] = new_schema
     table["data"] = new_data
 
@@ -174,10 +171,9 @@ def update_columnname(cmd):
     print("COLUMN RENAMING COMPLETED.")
 
 
-
-
 def update_columnvalues(cmd):
 
+    # PARSE
     tb_name = cmd[1][1:].strip()
     tar_dir = os.path.join(state.curr_dir, f"{tb_name}.json")
 
@@ -186,10 +182,12 @@ def update_columnvalues(cmd):
     current = ""
     inside = False
 
+    # VALIDATE
     if not raw_values:
-        print("EMPTY VALUE GROUP.")
+        error.errorType("LS_103")
         return
 
+    # PARSE
     for char in raw_values:
         if char == "(":
             inside = True
@@ -206,9 +204,10 @@ def update_columnvalues(cmd):
         parsed_rows.append(vals)
 
     if not os.path.exists(tar_dir):
-        print("TABLE DOES NOT EXIST.")
+        error.errorType("LS_302")
         return
 
+    # EXECUTE
     with open(tar_dir, "r") as f:
         table = json.load(f)
 
@@ -216,29 +215,25 @@ def update_columnvalues(cmd):
     data = table["data"]
     schema_items = list(schema.items())
 
-    col_count = len(schema_items)
-    existing_rows = len(data)
-    incoming_rows = len(parsed_rows)
-
-    if incoming_rows > existing_rows:
-        print("ROWS COUNT MISMATCH.")
+    if len(parsed_rows) > len(data):
+        error.errorType("LS_402")
         return
 
-    for row_index in range(incoming_rows):
+    for row_index in range(len(parsed_rows)):
         vals = parsed_rows[row_index]
         old_row = data[row_index]
 
-        while len(vals) < col_count:
+        while len(vals) < len(schema_items):
             vals.append("_")
 
-        if len(vals) > col_count:
-            print("VALUE COUNT MISMATCH.")
+        if len(vals) > len(schema_items):
+            error.errorType("LS_402")
             return
 
         for (col, dtype), val in zip(schema_items, vals):
 
             if val == "_":
-                continue 
+                continue
 
             try:
                 if dtype == "int":
@@ -251,67 +246,63 @@ def update_columnvalues(cmd):
                     lower = val.lower()
                     if lower in ("true", "1"):
                         old_row[col] = True
+                        continue
                     elif lower in ("false", "0"):
                         old_row[col] = False
-                    else:
-                        print(f"TYPE MISMATCH FOR COLUMN '{col}'. EXPECTED 'bool'.")
-                        return
+                        continue
+                    error.errorType("LS_401")
+                    return
 
                 elif dtype == "string":
                     old_row[col] = str(val)
 
                 elif dtype == "null":
-                    if val.lower() == "null":
-                        old_row[col] = None
-                    else:
-                        print(f"TYPE MISMATCH FOR COLUMN '{col}'. EXPECTED 'null'.")
+                    if val.lower() != "null":
+                        error.errorType("LS_401")
                         return
+                    old_row[col] = None
 
                 else:
-                    print(f"UNKNOWN DATA TYPE '{dtype}' FOR COLUMN '{col}'.")
+                    error.errorType("LS_401")
                     return
 
-            except:
-                print(f"TYPE MISMATCH FOR COLUMN '{col}'.")
+            except Exception:
+                error.errorType("LS_401")
                 return
 
+    # PERSIST
     with open(tar_dir, "w") as f:
         json.dump(table, f, indent=4)
 
-    print(f"UPDATED {incoming_rows} ROW(S) IN '{tb_name}'.")
-
-
-
+    print(f"UPDATED {len(parsed_rows)} ROW(S) IN '{tb_name}'.")
 
 
 def update_main(cmd):
 
-            
-    if state.curr_db is None:
-        print("NO DATABASE SELECTED.")
+    #VALIDATE
+    if not state.check_state():
         return
-    
-    if len(cmd) < 3:
-        print("INCOMPLETE UPDATE COMMAND.")
+
+    if state.curr_db is None:
+        error.errorType("LS_200")
         return
 
     if cmd[1][0] != "-" and cmd[2].lower() != "values":
         if len(cmd) != 3:
-            print("INVALID DATABASE RENAME SYNTAX.")
+            error.errorType("LS_000")
             return
-        
         update_db(cmd)
         return
 
     if cmd[1][0] != "-" and cmd[2].lower() == "values":
         if len(cmd) < 4:
-            print("NO TABLE NAMES PROVIDED.")
+            error.errorType("LS_103")
             return
         update_tablename(cmd)
         return
 
     if cmd[1][0] != "-":
-        print("INVALID UPDATE TARGET.")
+        error.errorType("LS_007")
         return
 
     if cmd[2].lower() != "values":
@@ -322,4 +313,4 @@ def update_main(cmd):
         update_columnvalues(cmd)
         return
 
-    print("INVALID UPDATE COMMAND FORMAT.")
+    error.errorType("LS_000")
