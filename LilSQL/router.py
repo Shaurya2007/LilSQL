@@ -36,7 +36,7 @@ def route(inp):
     elif cmd[0] == "use":
 
         if not len_check(cmd, 2):
-            error.errorType("LS_100")
+            errorType("LS_100")
             return
 
         # EXECUTE + PERSIST
