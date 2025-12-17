@@ -1,6 +1,7 @@
 import state
 import os
-import error
+from . import error
+
 
 
 def leave_database():

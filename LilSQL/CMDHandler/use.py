@@ -1,6 +1,7 @@
 import state
 import os
-import error
+from . import error
+
 
 def use_database(db_name):
 

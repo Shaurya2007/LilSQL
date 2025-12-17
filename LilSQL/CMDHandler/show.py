@@ -1,7 +1,8 @@
 import os
 import json
 import state
-import error
+from . import error
+
 
 
 def show_table(cmd):

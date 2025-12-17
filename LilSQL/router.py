@@ -4,7 +4,7 @@ from CMDHandler.use import use_main
 from CMDHandler.update import update_main
 from CMDHandler.show import show_main
 from CMDHandler.leave import leave_main
-from CMDHandler.error import error
+from CMDHandler.error import errorType
 
 def len_check(cmd, elen):
 
@@ -26,7 +26,7 @@ def route(inp):
     if cmd[0] == "create":
 
         if not len_check(cmd, 2):
-            error.errorType("LS_100")
+            errorType("LS_100")
             return
 
         # EXECUTE + PERSIST
@@ -46,7 +46,7 @@ def route(inp):
     elif cmd[0] == "delete":
 
         if not len_check(cmd, 2):
-            error.errorType("LS_100")
+            errorType("LS_100")
             return
 
         # EXECUTE + PERSIST
@@ -56,7 +56,7 @@ def route(inp):
     elif cmd[0] == "update":
 
         if not len_check(cmd, 2):
-            error.errorType("LS_100")
+            errorType("LS_100")
             return
 
         # EXECUTE + PERSIST
@@ -66,7 +66,7 @@ def route(inp):
     elif cmd[0] == "show":
 
         if not len_check(cmd, 2):
-            error.errorType("LS_100")
+            errorType("LS_100")
             return
 
         # EXECUTE + PERSIST
@@ -76,7 +76,7 @@ def route(inp):
     elif cmd[0] == "leave":
 
         if not len_check(cmd, 2):
-            error.errorType("LS_100")
+            errorType("LS_100")
             return
 
         # EXECUTE + PERSIST

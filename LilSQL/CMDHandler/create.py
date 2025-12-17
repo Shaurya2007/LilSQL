@@ -1,7 +1,7 @@
 import os
 import json
 import state
-import error
+from . import error
 
 
 def create_database(db_name):
