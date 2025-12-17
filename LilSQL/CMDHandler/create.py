@@ -20,6 +20,10 @@ def create_database(db_name):
 
     # EXECUTE
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    if not os.path.exists(os.path.join(base_dir, "Database")):
+        os.makedirs(os.path.join(base_dir, "Database"))
+
     db_path = os.path.join(base_dir, "Database", db_name)
 
     if os.path.exists(db_path):
