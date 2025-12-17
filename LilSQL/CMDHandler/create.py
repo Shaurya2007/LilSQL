@@ -136,7 +136,7 @@ def create_columnvalues(cmd):
     # PARSE
     tb_name = cmd[1][1:].strip()
     tar_dir = os.path.join(state.curr_dir, f"{tb_name}.json")
-    valid_types = {"int", "float", "bool", "string", "null"}
+    valid_types = ["int", "float", "bool", "string", "null"]
     raw_values = " ".join(cmd[3:]).strip()
 
     rows_raw = []
@@ -210,18 +210,23 @@ def create_columnvalues(cmd):
                     
                     error.errorType("LS_006")
                     return
-                elif dtype == valid_types[3]:
+                elif dtype == "string":
+                    if val is None:
+                        new_row[col] = None
+                        continue
+
                     new_row[col] = str(val)
+
                 elif dtype == valid_types[4]:
                     if val.lower() != "null":
                         error.errorType("LS_006")
                         return
                     new_row[col] = None
-
-            except Exception:
-                error.errorType("LS_006")
+                                
+            except Exception as e:  
+                print(type(e).__name__, e)
                 return
-
+            
         data.append(new_row)
         inserted += 1
 
