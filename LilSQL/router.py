@@ -75,9 +75,5 @@ def route(inp):
 
     elif cmd[0] == "leave":
 
-        if not len_check(cmd, 2):
-            errorType("LS_100")
-            return
-
         # EXECUTE + PERSIST
         leave_main(cmd)
