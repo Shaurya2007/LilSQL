@@ -2,7 +2,7 @@ import os
 import json
 import state
 from . import error
-
+from . import where
 
 
 def delete_database(cmd):
@@ -133,17 +133,74 @@ def delete_row_values(cmd):
 
     schema = table["schema"]
     schema_cols = list(schema.keys())
-    schema_types = list(schema.values())
-    col_count = len(schema_cols)
     data = table["data"]
 
-    if raw == "":
-        table["data"] = []
+    # WHERE MODE
+    if "where" in raw:
 
-        # PERSIST 
+        wh = raw.split()
+        wh_index = wh.index("where")
+
+        col_raw = " ".join(wh[:wh_index]).strip()
+        condition_cmd = wh[wh_index:]
+
+        rows_to_delete = where.where_cmd(condition_cmd, schema, data)
+
+        if not rows_to_delete:
+            print("NO MATCHING ROWS FOUND.")
+            return
+
+        # COLUMN PARSING
+        if col_raw == "":
+            error.errorType("LS_000")
+            return
+
+        cols = [c.strip() for c in col_raw.split(",")]
+
+        schema_cols = list(schema.keys())
+
+        # HANDLE 'all'
+        if "all" in cols:
+            if len(cols) != 1:
+                error.errorType("LS_000")
+                return
+            delete_cols = schema_cols.copy()
+        else:
+            delete_cols = []
+            for c in cols:
+                if c == "" or c == "_":
+                    continue
+                if c not in schema:
+                    error.errorType("LS_305")
+                    return
+                delete_cols.append(c)
+
+        if not delete_cols:
+            error.errorType("LS_000")
+            return
+
+        # DELETE EXECUTION
+        for i in rows_to_delete:
+            if len(delete_cols) == len(schema_cols):
+                data[i] = None
+            else:
+                for c in delete_cols:
+                    data[i][c] = None
+
+        table["data"] = [r for r in data if r is not None]
+
         with open(tb_path, "w") as f:
             json.dump(table, f, indent=4)
 
+        print("VALUES DELETED.")
+        return
+
+    # NO WHERE MODE
+
+    if raw == "":
+        table["data"] = []
+        with open(tb_path, "w") as f:
+            json.dump(table, f, indent=4)
         print("ALL ROWS DELETED.")
         return
 
@@ -166,10 +223,13 @@ def delete_row_values(cmd):
         vals = [v.strip().strip('"').strip("'") for v in r.split(",")]
         parsed.append(vals)
 
-    # VALIDATE
     if not parsed:
         error.errorType("LS_004")
         return
+
+    col_count = len(schema_cols)
+
+    rows_to_delete = []
 
     for target in parsed:
         if len(target) != col_count:
@@ -179,74 +239,48 @@ def delete_row_values(cmd):
         for index, row in enumerate(data):
             match = True
 
-            for col, dtype, val in zip(schema_cols, schema_types, target):
+            for col, dtype, val in zip(schema_cols, schema.values(), target):
 
                 if val == "_":
                     continue
 
                 row_val = row[col]
 
-                if dtype == "null":
-                    if not (row_val is None and val.lower() == "null"):
+                try:
+                    if dtype == "int" and int(row_val) != int(val):
                         match = False
-                        break
-
-                elif dtype == "int":
-                    try:
-                        if int(row_val) != int(val):
+                    elif dtype == "float" and float(row_val) != float(val):
+                        match = False
+                    elif dtype == "bool":
+                        if (str(row_val).lower() in ("true", "1")) != (val.lower() in ("true", "1")):
                             match = False
-                            break
-                    except Exception:
+                    elif dtype == "string" and str(row_val) != val:
                         match = False
-                        break
-
-                elif dtype == "float":
-                    try:
-                        if float(row_val) != float(val):
-                            match = False
-                            break
-                    except Exception:
+                    elif dtype == "null" and not (row_val is None and val.lower() == "null"):
                         match = False
-                        break
-
-                elif dtype == "bool":
-                    try:
-                        row_bool = bool(row_val) if isinstance(row_val, bool) else str(row_val).lower() in ("true", "1")
-                        tgt_bool = val.lower() in ("true", "1")
-                        if row_bool != tgt_bool:
-                            match = False
-                            break
-                    except Exception:
-                        match = False
-                        break
-
-                elif dtype == "string":
-                    if str(row_val) != val:
-                        match = False
-                        break
-
-                else:
+                except:
                     match = False
+
+                if not match:
                     break
 
             if match:
-
-                all_deleted = True
-                for val in target:
-                    if val == "_":
-                        all_deleted = False
-                        break
-
-                if all_deleted:
-                    data[index] = None
-                else:
-                    for col, val in zip(schema_cols, target):
-                        if val != "_":
-                            row[col] = None
+                rows_to_delete.append(index)
 
     table["data"] = [r for r in data if r is not None]
 
-    # PERSIST
+        # SAFETY
+    if len(rows_to_delete) > 1:
+        error.errorType("LS_308")
+        return
+
+    if len(rows_to_delete) == 0:
+        error.errorType("LS_307")
+        return
+
+    data[rows_to_delete[0]] = None
+
+
     with open(tb_path, "w") as f:
         json.dump(table, f, indent=4)
 

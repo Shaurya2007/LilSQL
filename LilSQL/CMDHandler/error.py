@@ -19,6 +19,8 @@ def invalid_cmd(code,num):
             print(f"ERROR {code}: INVALID DATA TYPE.")
         case "07":
             print(f"ERROR {code}: INVALID TARGET.")
+        case "08":
+            print(f"ERROR {code}: INVALID OPERATOR.")
 
 #Error LS_1XX
 def incomplete_cmd(code,num):
@@ -62,6 +64,11 @@ def exist_cmd(code,num):
             print(f"ERROR {code}: COLUMN DOES NOT EXIST.")
         case "06":
             print(f"ERROR {code}: COLUMN ALREADY EXISTS.")
+        case "07":
+            print(f"ERROR {code}: ROWS NOT FOUND.")
+        case "08":    
+            print(f"ERROR {code}: MULTIPLE ROWS MATCH. USE WHERE.")
+
 
 #Error LS_4XX
 def mismatch_cmd(code,num):
@@ -95,7 +102,7 @@ def unexpected_cmd(code,num):
     match num:
 
         case "00":
-            print(f"ERROR {code}: UNEXPECTED STATE ERROR OCCURRED.")
+            print(f"ERROR {code}: UNEXPECTED ERROR OCCURRED.")
 
 def errorType(ercode):
 

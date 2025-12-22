@@ -45,7 +45,7 @@ def create_table(cmd):
     ref_schema_values = [v.strip() for v in raw_schema_values.split(",")]
 
     schema_values = {}
-    valid_types = {"int", "float", "bool", "string", "null"}
+    valid_types = ["int", "float", "bool", "string", "null"]
     invalid_name = ['/','\\','\\',':','*','?','"','<','>','|']
 
     new_cols = []

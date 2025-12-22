@@ -2,12 +2,13 @@ import os
 import json
 import state
 from . import error
-
+from . import where
 
 
 def show_table(cmd):
 
     # VALIDATE
+
     if len(cmd) < 2:
         error.errorType("LS_100")
         return
@@ -16,10 +17,8 @@ def show_table(cmd):
         error.errorType("LS_000")
         return
 
-    # PARSE
     tb_name = cmd[1][1:].strip()
 
-    # VALIDATE
     if tb_name == "":
         error.errorType("LS_002")
         return
@@ -30,39 +29,49 @@ def show_table(cmd):
         error.errorType("LS_302")
         return
 
-    # EXECUTE
-    with open(tar_dir, 'r') as f:
+    # LOAD
+
+    with open(tar_dir, "r") as f:
         table = json.load(f)
 
     schema = table["schema"]
     data = table["data"]
 
-    col_filter_raw = None
     extra = cmd[2:]
+    col_filter_raw = None
 
-    # VALIDATE
+    # WHERE
+
+    if "where" in extra:
+        where_index = extra.index("where")
+        command = extra[where_index:]
+
+        filtered_rows = where.where_cmd(command, schema, data)
+        
+        if filtered_rows is None:
+            error.errorType("LS_600")
+            return
+        
+        data = [data[i] for i in filtered_rows]
+
+        extra = extra[:where_index]
+
+    # COLUMN FILTER 
+
     if extra:
         if not extra[0].startswith("("):
             error.errorType("LS_000")
             return
 
-    # PARSE
-    for token in cmd[2:]:
-        if "(" in token:
-            index = cmd.index(token)
-            col_filter_raw = " ".join(cmd[index:])
-            break
+        col_filter_raw = " ".join(extra)
 
-    # VALIDATE
-    if col_filter_raw is None:
-        selected_cols = list(schema.keys())
-
-    else:
         if "(" not in col_filter_raw or ")" not in col_filter_raw:
             error.errorType("LS_000")
             return
 
-        inside = col_filter_raw[col_filter_raw.find("(")+1 : col_filter_raw.find(")")].strip()
+        inside = col_filter_raw[
+            col_filter_raw.find("(") + 1 : col_filter_raw.find(")")
+        ].strip()
 
         if inside == "":
             error.errorType("LS_103")
@@ -74,19 +83,20 @@ def show_table(cmd):
             if col not in schema:
                 error.errorType("LS_305")
                 return
+    else:
+        selected_cols = list(schema.keys())
 
-    # EXECUTE
+    # PRINT
+
     col_widths = {}
     for col in selected_cols:
-        longest_data = max((len(str(r[col])) for r in data), default=0)
-        col_widths[col] = max(len(col), longest_data) + 2
+        longest = max((len(str(r[col])) for r in data), default=0)
+        col_widths[col] = max(len(col), longest) + 2
 
-    # PERSIST
     header = "| "
     for col in selected_cols:
         header += col.ljust(col_widths[col]) + " | "
     print(header)
-
     print("-" * len(header))
 
     for row in data:
@@ -98,7 +108,6 @@ def show_table(cmd):
 
 def show_main(cmd):
 
-    # VALIDATE
     if not state.check_state():
         return
 
@@ -106,5 +115,4 @@ def show_main(cmd):
         error.errorType("LS_200")
         return
 
-    # EXECUTE + PERSIST
     show_table(cmd)

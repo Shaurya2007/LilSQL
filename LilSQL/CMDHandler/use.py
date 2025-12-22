@@ -23,7 +23,7 @@ def use_database(db_name):
 def use_main(cmd):
 
     # VALIDATE
-    if not state.check_state():
+    if state.check_state is False:
         return
     
     # PARSE

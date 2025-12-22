@@ -2,7 +2,7 @@ import os
 import json
 import state
 from . import error
-
+from . import where
 
 
 def update_db(cmd):
@@ -174,21 +174,29 @@ def update_columnname(cmd):
 
 def update_columnvalues(cmd):
 
+    # VALIDATE
+    if "where" not in [c.lower() for c in cmd]:
+        error.errorType("LS_000")
+        return
+
     # PARSE
     tb_name = cmd[1][1:].strip()
     tar_dir = os.path.join(state.curr_dir, f"{tb_name}.json")
 
-    raw_values = " ".join(cmd[3:]).strip()
-    rows_raw = []
-    current = ""
-    inside = False
+    wh_index = [i for i, c in enumerate(cmd) if c.lower() == "where"][0]
 
-    # VALIDATE
+    raw_values = " ".join(cmd[3:wh_index]).strip()
+    where_cmd = cmd[wh_index:]
+
     if not raw_values:
         error.errorType("LS_103")
         return
 
-    # PARSE
+    # PARSE 
+    rows_raw = []
+    current = ""
+    inside = False
+
     for char in raw_values:
         if char == "(":
             inside = True
@@ -199,75 +207,77 @@ def update_columnvalues(cmd):
         elif inside:
             current += char
 
-    parsed_rows = []
-    for raw in rows_raw:
-        vals = [v.strip().strip("'").strip('"') for v in raw.split(",")]
-        parsed_rows.append(vals)
+    if not rows_raw:
+        error.errorType("LS_004")
+        return
+
+    vals = [v.strip().strip("'").strip('"') for v in rows_raw[0].split(",")]
 
     if not os.path.exists(tar_dir):
         error.errorType("LS_302")
         return
 
-    # EXECUTE
+    # LOAD
     with open(tar_dir, "r") as f:
         table = json.load(f)
 
     schema = table["schema"]
     data = table["data"]
     schema_items = list(schema.items())
+             
+    while len(vals) < len(schema_items):
+        vals.append("_")
 
-    if len(parsed_rows) > len(data):
+    if len(vals) > len(schema_items):
         error.errorType("LS_402")
         return
 
-    for row_index in range(len(parsed_rows)):
-        vals = parsed_rows[row_index]
-        old_row = data[row_index]
+    rows_to_update = where.where_cmd(where_cmd, schema, data)
 
-        while len(vals) < len(schema_items):
-            vals.append("_")
+    if not rows_to_update:
+        error.errorType("LS_307")
+        return
 
-        if len(vals) > len(schema_items):
-            error.errorType("LS_402")
-            return
+    # UPDATE
+    for row_index in rows_to_update:
+        row = data[row_index]
 
         for (col, dtype), val in zip(schema_items, vals):
 
-            if val == "_":
+            if val == "_" or val == "":
                 continue
 
             try:
                 if dtype == "int":
-                    old_row[col] = int(val)
+                    row[col] = int(val)
 
                 elif dtype == "float":
-                    old_row[col] = float(val)
+                    row[col] = float(val)
 
                 elif dtype == "bool":
-                    lower = val.lower()
-                    if lower in ("true", "1"):
-                        old_row[col] = True
-                        continue
-                    elif lower in ("false", "0"):
-                        old_row[col] = False
-                        continue
-                    error.errorType("LS_401")
-                    return
+                    low = val.lower()
+                    if low in ("true", "1"):
+                        row[col] = True
+                    elif low in ("false", "0"):
+                        row[col] = False
+                    else:
+                        error.errorType("LS_401")
+                        return
 
                 elif dtype == "string":
-                    old_row[col] = str(val)
+                    row[col] = str(val)
 
                 elif dtype == "null":
                     if val.lower() != "null":
                         error.errorType("LS_401")
                         return
-                    old_row[col] = None
+                    row[col] = None
 
                 else:
                     error.errorType("LS_401")
                     return
 
-            except Exception:
+            except:
                 error.errorType("LS_401")
                 return
 
@@ -275,7 +285,8 @@ def update_columnvalues(cmd):
     with open(tar_dir, "w") as f:
         json.dump(table, f, indent=4)
 
-    print(f"UPDATED {len(parsed_rows)} ROW(S) IN '{tb_name}'.")
+    print(f"UPDATED {len(rows_to_update)} ROW(S) IN '{tb_name}'.")
+
 
 
 def update_main(cmd):

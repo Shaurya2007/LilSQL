@@ -1,42 +1,42 @@
-# LilSQL v0.8.1 — A Tiny, File-Based SQL Engine
+# LilSQL v0.8.2 — A Tiny, File-Based SQL Engine
 
-![version](https://img.shields.io/badge/version-v0.8.1-blue)
+![version](https://img.shields.io/badge/version-v0.8.2-blue)
 ![python](https://img.shields.io/badge/python-3.8%2B-yellow)
 ![status](https://img.shields.io/badge/status-Experimental-orange)
 
-LilSQL is a lightweight, JSON-powered mini SQL engine built entirely in Python.  
-Its goal is simple: **SQL-like power without SQL-like complexity.**
+LilSQL is a lightweight, JSON-powered mini SQL engine built entirely in Python.
 
-LilSQL is **not a clone of SQL**.  
-It is **my interpretation** of how a database system works internally.
+It is **not a SQL clone**.  
+It is **my interpretation of how a database system works internally**, designed to be explicit, safe, and understandable.
 
 ---
 
-## What’s New in v0.8.1
+## What’s New in v0.8.2
 
-This release focuses on **internal correctness, safety, and maintainability**.  
-No new features were added.
+This release finalizes **WHERE-based query semantics** across LilSQL and completes
+the **core data mutation layer**.
 
-### Improvements
-- Centralized error normalization with error codes
-- Deterministic database storage location
-- Enforced state invariants
-- Guard-clause–based control flow
-- Safer filesystem handling for `.py` and `.exe`
-- Internal refactors preparing for future updates
+The focus of v0.8.2 was **correct behavior, clear intent, and safety**, not feature count.
+
+### Highlights
+- `WHERE` support added to **show**, **delete**, and **update**
+- Shared condition-evaluation engine
+- Clear separation between row-level and column-level operations
+- Strong protection against ambiguous destructive commands
+- UPDATE semantics redesigned for clarity and safety
 
 ---
 
 ## Core Commands
 
-LilSQL operates using a custom, minimal syntax:
+LilSQL uses a compact, custom syntax:
 
 - `create` — databases, tables, schemas, rows
-- `update` — rename and modify data
-- `delete` — rows, columns, tables, databases
-- `show` — display table data
 - `use` — connect to a database
 - `leave` — disconnect
+- `show` — display table data
+- `update` — modify column values (WHERE-based)
+- `delete` — delete rows or column values
 
 ---
 
@@ -52,40 +52,94 @@ delete mydb
 
 ---
 
-### Table & Column Management
+### Table Creation
 ```
-create -users id:int,name:string
-update -users name,_
-delete -users name
+create -users id:int,name:string,age:int,active:bool
 ```
-
-`_` skips a column.
 
 ---
 
-### Row Operations
+### Insert Rows
 ```
-create -users values (1,alice),(2,bob)
-update -users values (alice_new,_)
+create -users values (1,alice,18,true),(2,bob,20,false)
+```
+
+---
+
+### Show Data (WITH WHERE)
+```
+show -users
+show -users (id,name)
+show -users where age > 18
+show -users (id,name) where active == true
+```
+
+Rules:
+- Column list is optional
+- WHERE filters rows
+- Output is auto-formatted
+
+---
+
+### Update Data (WHERE required)
+```
+update -users values (_,Alice_New) where id == 1
+update -users values (_,Anon) where name == alice
+update -users values (_,_,25,_) where age < 20
+```
+
+Rules:
+- `WHERE` is mandatory
+- `_` or empty skips a column
+- Multiple rows matching WHERE are updated intentionally
+- Schema is never modified
+- `all` updates every row
+
+---
+
+### Delete Data
+
+#### Literal delete (NO WHERE)
+```
 delete -users values (1,_)
 ```
 
-Supported types:
+Rules:
+- Deletes exactly one matching row
+- Multiple matches cause an error
+- Used for precise, surgical deletes
+
+---
+
+#### Conditional delete (WITH WHERE)
+```
+delete -users values name where age > 25
+delete -users values id,name where active == false
+delete -users values all where id == 5
+```
+
+Rules:
+- WHERE implies intentional bulk operation
+- Column list decides deletion scope
+- `all` deletes entire rows
+- Partial columns are set to `null`
+- Schema is never touched
+
+---
+
+### WHERE Conditions
+
+Supported operators:
+```
+>   <   >=   <=   ==   !=
+```
+
+Supported data types:
 - `int`
 - `float`
 - `bool`
 - `string`
 - `null`
-
----
-
-### Display
-```
-show -users
-show -users (id,name)
-```
-
-Pretty-printed output with auto column sizing.
 
 ---
 
@@ -97,8 +151,9 @@ LilSQL/
 │   ├── create.py
 │   ├── update.py
 │   ├── delete.py
-│   ├── use.py
+│   ├── where.py
 │   ├── show.py
+│   ├── use.py
 │   └── error.py
 │── state.py
 │── router.py
@@ -111,13 +166,17 @@ Databases are created inside an internal `Database/` directory at runtime.
 
 ## Version History
 
-### v0.8.1 (Current)
-- Error normalization system
+### v0.8.2 (Current)
+- WHERE support for SHOW, UPDATE, and DELETE
+- Unified condition engine
+- Clear and safe mutation semantics
+- Ambiguous delete protection
+- Column-aware updates and deletes
+
+### v0.8.1
+- Error normalization
 - State invariant enforcement
-- Deterministic storage
 - Guard-clause refactor
-- Safer execution
-- No feature changes
 
 ### v0.8.0
 - Initial public release
@@ -130,8 +189,8 @@ Databases are created inside an internal `Database/` directory at runtime.
 ## Roadmap
 
 ### v0.8.x
-- Incremental query features (WHERE, LIKE, AND / OR)
-- Continued internal optimization
+- Additional WHERE operators (`AND`, `OR`, `LIKE`, `BETWEEN`)
+- Internal cleanup and optimization
 
 ### v0.9.x
 - Constraints
@@ -139,4 +198,3 @@ Databases are created inside an internal `Database/` directory at runtime.
 
 ### v1.0
 - Full OOP rewrite
----
