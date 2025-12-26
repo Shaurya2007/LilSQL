@@ -1,32 +1,24 @@
-# LilSQL v0.8.2 — A Tiny, File-Based SQL Engine
+# LilSQL v0.8.3 — Modular Core & Persistent Runtime
 
-![version](https://img.shields.io/badge/version-v0.8.2-blue)
+![version](https://img.shields.io/badge/version-v0.8.3-blue)
 ![python](https://img.shields.io/badge/python-3.8%2B-yellow)
 ![status](https://img.shields.io/badge/status-Experimental-orange)
 
 LilSQL is a lightweight, JSON-powered mini SQL engine built entirely in Python.
 
 It is **not a SQL clone**.  
-It is **my interpretation of how a database system works internally**, designed to be explicit, safe, and understandable.
+It is **my interpretation** of a database engine,
+designed to be explicit, safe, debuggable, and human-readable.
 
 ---
 
-## What’s New in v0.8.2
+## What’s New in v0.8.3
 
-This release finalizes **WHERE-based query semantics** across LilSQL and completes
-the **core data mutation layer**.
-
-The focus of v0.8.2 was **correct behavior, clear intent, and safety**, not feature count.
-
-### Highlights
-- `WHERE` support added to **show**, **delete**, and **update**
-- Shared condition-evaluation engine
-- Clear separation between row-level and column-level operations
-- Strong protection against ambiguous destructive commands
-- UPDATE semantics redesigned for clarity and safety
-
----
-
+- Full **command modularization** across CREATE, UPDATE, DELETE, SHOW
+- Centralized and safer **state management**
+- Improved **error code clarity with execution-phase awareness**
+- Runtime storage decoupled from executable location
+- Cleaner routing and handler responsibilities
 ## Core Commands
 
 LilSQL uses a compact, custom syntax:
@@ -38,11 +30,14 @@ LilSQL uses a compact, custom syntax:
 - `update` — modify column values (WHERE-based)
 - `delete` — delete rows or column values
 
+All commands are **case-insensitive**.
+
 ---
 
 ## Features
 
 ### Database Management
+
 ```
 create mydb
 use mydb
@@ -160,13 +155,21 @@ LilSQL/
 │── cli.py
 ```
 
-Databases are created inside an internal `Database/` directory at runtime.
+Databases are now stored in LocalAppdata 
 
 ---
 
 ## Version History
 
-### v0.8.2 (Current)
+### v0.8.3 (Current)
+- Full modular refactor
+- Case-insensitive command language
+- Centralized state management
+- Persistent runtime directory
+- Error code phase tagging
+- Prepared architecture for undo & logging
+
+### v0.8.2
 - WHERE support for SHOW, UPDATE, and DELETE
 - Unified condition engine
 - Clear and safe mutation semantics
