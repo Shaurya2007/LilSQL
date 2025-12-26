@@ -1,31 +1,43 @@
-import state
 import os
+import state
 from . import error
+
+
+def resolve_database(db_name, db_root):
+
+    for db in os.listdir(db_root):
+        if db.lower() == db_name.lower():
+            return db
+
+    error.errorType("LS_300")
+    return None
 
 
 def use_database(db_name):
 
     # PARSE
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    base_dir = state.root_dir
     db_root = os.path.join(base_dir, "Database")
 
     # VALIDATE
-    if db_name not in os.listdir(db_root):
-        error.errorType("LS_300")
+    real_db = resolve_database(db_name, db_root)
+    if real_db is None:
         return
-    
+
     # EXECUTE + PERSIST
-    state.curr_db = db_name
-    state.curr_dir = os.path.join(base_dir, "Database", db_name)
-    print(f"USING DATABASE '{db_name}'")
+    state.set_db(real_db, os.path.join(db_root, real_db))
+    print(f"USING DATABASE '{real_db}'")
 
 
 def use_main(cmd):
 
     # VALIDATE
-    if state.check_state is False:
+    if not state.check_state():
         return
-    
-    # PARSE
-    if cmd[1] != "":
-        use_database(cmd[1])
+
+    if len(cmd) < 2 or cmd[1] == "":
+        error.errorType("LS_100")
+        return
+
+    # EXECUTE
+    use_database(cmd[1])

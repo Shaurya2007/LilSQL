@@ -1,27 +1,38 @@
-import os
 from router import route
 import state
+import os
 
-def repl_start():
+def storage_init():
+    target_root = os.getenv("LOCALAPPDATA")
+    root_dir = os.path.join(target_root, "LilSQL")
 
-    # INPUT LOOP
+    if not os.path.exists(root_dir):
+        os.makedirs(root_dir)
+
+def read_input():
+    return input(f"LILSQL({state.curr_db if state.curr_db else ''})=> ")
+
+
+def should_exit(inp):
+    return inp.strip().lower() in ("exit", "quit")
+
+
+def repl_loop():
+
     while True:
-        inp = input(f"LILSQL({state.curr_db if state.curr_db else ''})=> ").lower()
+        inp = read_input()
 
-        # VALIDATE
-        if inp == "exit" or inp == "quit":
+        if should_exit(inp):
             print("Exiting MiniSQL CLI.")
             break
 
-        # ROUTER
         route(inp)
-            
+
 
 def main():
-
-    # START
+    storage_init()
     print("Welcome to MiniSQL CLI. Type 'exit' or 'quit' to leave.")
-    repl_start()
+    repl_loop()
 
 
 if __name__ == "__main__":

@@ -6,74 +6,40 @@ from CMDHandler.show import show_main
 from CMDHandler.leave import leave_main
 from CMDHandler.error import errorType
 
+
 def len_check(cmd, elen):
+    return len(cmd) >= elen
 
-    # VALIDATE
-    if len(cmd) < elen:
-        return False
-    return True
 
-    
+commands = {
+    "create": (create_main, 2),
+    "use": (use_main, 2),
+    "delete": (delete_main, 2),
+    "update": (update_main, 2),
+    "show": (show_main, 2),
+    "leave": (leave_main, 1)
+}
+
+
 def route(inp):
 
     # PARSE
-    cmd = list(inp.split())
+    cmd = inp.split()
 
     # VALIDATE
     if not cmd:
         return
-    
-    if cmd[0] == "create":
 
-        if not len_check(cmd, 2):
-            errorType("LS_100")
-            return
+    keyword = cmd[0].lower() 
 
-        # EXECUTE + PERSIST
-        create_main(cmd)
-    
+    if keyword not in commands:
+        errorType("LS_000VD")
+        return
 
-    elif cmd[0] == "use":
+    handler, min_len = commands[keyword]
+    if not len_check(cmd, min_len):
+        errorType("LS_100VD")
+        return
 
-        if not len_check(cmd, 2):
-            errorType("LS_100")
-            return
-
-        # EXECUTE + PERSIST
-        use_main(cmd)
-
-
-    elif cmd[0] == "delete":
-
-        if not len_check(cmd, 2):
-            errorType("LS_100")
-            return
-
-        # EXECUTE + PERSIST
-        delete_main(cmd)
-
-
-    elif cmd[0] == "update":
-
-        if not len_check(cmd, 2):
-            errorType("LS_100")
-            return
-
-        # EXECUTE + PERSIST
-        update_main(cmd)
-    
-
-    elif cmd[0] == "show":
-
-        if not len_check(cmd, 2):
-            errorType("LS_100")
-            return
-
-        # EXECUTE + PERSIST
-        show_main(cmd)
-
-
-    elif cmd[0] == "leave":
-
-        # EXECUTE + PERSIST
-        leave_main(cmd)
+    # EXECUTE
+    handler(cmd)

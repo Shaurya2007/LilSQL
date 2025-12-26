@@ -1,3 +1,5 @@
+# PR; VD; EX; PS; RS (RESOLVE ERROR)
+
 #Error LS_0XX
 def invalid_cmd(code,num):
 
@@ -106,7 +108,7 @@ def unexpected_cmd(code,num):
 
 def errorType(ercode):
 
-    code = ercode[3:]
+    code = ercode[3:6]
     ercategory = code[0]
     ernumber = code[1:]
 

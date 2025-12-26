@@ -3,271 +3,424 @@ import json
 import state
 from . import error
 
+#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Creating Database-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
+
+def parse_create_database(db_name):
+    return db_name.strip()
+
+
+def validate_create_database(db_name):
+
+    if state.curr_db is not None:
+        error.errorType("LS_201VD")
+        return False
+
+    invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+
+    if (db_name == "" or db_name.startswith("-") or any(ch in db_name for ch in invalid_chars)):
+        error.errorType("LS_001VD")
+        return False
+
+    return True
+
+
+def resolve_db_root():
+    base_dir = state.root_dir
+    db_root = os.path.join(base_dir, "Database")
+
+    if not os.path.exists(db_root):
+        os.makedirs(db_root)
+
+    return db_root
+
+
+def validate_db_uniqueness(db_root, db_name):
+
+    for db in os.listdir(db_root):
+        if db.lower() == db_name.lower():
+            error.errorType("LS_301VD")
+            return False
+
+    return True
+
+
+def execute_create_database(db_root, db_name):
+    os.makedirs(os.path.join(db_root, db_name))
+    print(f"DATABASE '{db_name}' CREATED.")
+
 
 def create_database(db_name):
 
     # PARSE
-    invalid_name = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+    db_name = parse_create_database(db_name)
 
     # VALIDATE
-    if state.curr_db is not None:
-        error.errorType("LS_201")
+    if not validate_create_database(db_name):
         return
-    
-    if db_name.strip() == "" or db_name[0] == "-" or any(char in db_name for char in invalid_name):
-        error.errorType("LS_001")           
+
+    # RESOLVE ROOT
+    db_root = resolve_db_root()
+
+    # VALIDATE UNIQUENESS (CASE-INSENSITIVE)
+    if not validate_db_uniqueness(db_root, db_name):
         return
 
     # EXECUTE
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    execute_create_database(db_root, db_name)
 
-    if not os.path.exists(os.path.join(base_dir, "Database")):
-        os.makedirs(os.path.join(base_dir, "Database"))
+#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Creating Tables-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 
-    db_path = os.path.join(base_dir, "Database", db_name)
 
-    if os.path.exists(db_path):
-        error.errorType("LS_301")
-        return
-    
-    # PERSIST
-    os.makedirs(db_path)
-    print(f"DATABASE '{db_name}' CREATED.")
+valid_types = ["int", "float", "bool", "string", "null"]
+invalid_name_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+
+
+def parse_create_table(cmd):
+    tb_name = cmd[1][1:].strip()
+    raw_schema = " ".join(cmd[2:]).strip()
+
+    if not raw_schema:
+        error.errorType("LS_005PR")
+        return None, None
+
+    parts = [v.strip() for v in raw_schema.split(",")]
+    return tb_name, parts
+
+
+def parse_schema_parts(parts):
+    parsed = []
+
+    for p in parts:
+        if ":" not in p:
+            error.errorType("LS_005PR")
+            return None
+
+        col, dtype = p.split(":", 1)
+        col = col.strip()
+        dtype = dtype.strip().lower()
+
+        if dtype not in valid_types:
+            error.errorType("LS_006PR")
+            return None
+
+        parsed.append((col, dtype))
+
+    return parsed
+
+
+def validate_table_name(tb_name):
+    if (tb_name == "" or any(ch in tb_name for ch in invalid_name_chars)):
+        error.errorType("LS_002VD")
+        return False
+    return True
+
+
+def validate_new_columns(cols):
+    seen = set()
+
+    for col, _ in cols:
+        if (col == "" or any(ch in col for ch in invalid_name_chars)):
+            error.errorType("LS_003VD")
+            return False
+
+        low = col.lower()
+        if low in seen:
+            error.errorType("LS_304VD")
+            return False
+
+        seen.add(low)
+
+    return True
+
+
+def resolve_table_path(tb_name):
+    return os.path.join(state.curr_dir, f"{tb_name}.json")
+
+
+def load_existing_table(tb_path):
+    with open(tb_path, "r") as f:
+        table = json.load(f)
+    return table, table["schema"], table["data"]
+
+
+def execute_create_new_table(tb_path, cols):
+    schema = {}
+
+    for col, dtype in cols:
+        schema[col] = dtype
+
+    table = {"schema": schema, "data": []}
+
+    with open(tb_path, "w") as f:
+        json.dump(table, f, indent=4)
+
+    print(f"TABLE '{os.path.basename(tb_path)[:-5]}' CREATED.")
+
+
+def default_value(dtype):
+    if dtype == "int":
+        return 0
+    if dtype == "float":
+        return 0.0
+    if dtype == "bool":
+        return False
+    if dtype == "string":
+        return ""
+    if dtype == "null":
+        return None
+
+
+def execute_add_columns(schema, data, cols):
+    for col, dtype in cols:
+        schema[col] = dtype
+        for row in data:
+            row[col] = default_value(dtype)
+
+
+def persist_table(tb_path, table):
+    with open(tb_path, "w") as f:
+        json.dump(table, f, indent=4)
 
 
 def create_table(cmd):
 
     # PARSE
-    tb_name = cmd[1][1:].strip()
-    tar_dir = os.path.join(state.curr_dir, f"{tb_name}.json")
+    tb_name, raw_parts = parse_create_table(cmd)
+    if tb_name is None:
+        return
 
-    raw_schema_values = " ".join(cmd[2:])
-    ref_schema_values = [v.strip() for v in raw_schema_values.split(",")]
-
-    schema_values = {}
-    valid_types = ["int", "float", "bool", "string", "null"]
-    invalid_name = ['/','\\','\\',':','*','?','"','<','>','|']
-
-    new_cols = []
+    cols = parse_schema_parts(raw_parts)
+    if cols is None:
+        return
 
     # VALIDATE
-    for v in ref_schema_values:
-        if ":" not in v:
-            error.errorType("LS_005")
-            return
-
-        col, dtype = v.split(":", 1)
-        col = col.strip()
-        dtype = dtype.strip()
-
-        if dtype not in valid_types:
-            error.errorType("LS_006")
-            return
-
-        new_cols.append((col, dtype))
-
-    # EXECUTE
-    if not os.path.exists(tar_dir):
-
-        if any(char in tb_name for char in invalid_name):
-            error.errorType("LS_002")
-            return
-
-        for col, dtype in new_cols:
-            schema_values[col] = dtype
-
-        new_table = {
-            "schema": schema_values,
-            "data": []
-        }
-
-        # PERSIST
-        with open(tar_dir, "w") as f:
-            json.dump(new_table, f, indent=4)
-
-        print(f"TABLE '{tb_name}' CREATED.")
+    if not validate_table_name(tb_name):
         return
 
-    else:
-        with open(tar_dir, "r") as f:
-            table = json.load(f)
-
-        schema = table["schema"]
-        data = table["data"]
-
-        # VALIDATE
-        for col, dtype in new_cols:
-
-            col = col.strip()
-
-            if any(char in col for char in invalid_name):
-                error.errorType("LS_003")
-                return
-            
-            if col in schema:
-                error.errorType("LS_306")
-                return
-
-            # EXECUTE 
-            schema[col] = dtype  
-
-            for row in data:
-                if dtype == valid_types[0]:
-                    row[col] = 0
-                elif dtype == valid_types[1]:
-                    row[col] = 0.0
-                elif dtype == valid_types[2]:
-                    row[col] = False
-                elif dtype == valid_types[3]:
-                    row[col] = ""
-                elif dtype == valid_types[4]:
-                    row[col] = None
-
-        # PERSIST
-        with open(tar_dir, "w") as f:
-            json.dump(table, f, indent=4)
-
-        print(f"ADDED {len(new_cols)} NEW COLUMN(S) TO TABLE '{tb_name}'.")
+    if not validate_new_columns(cols):
         return
 
+    # RESOLVE PATH
+    tb_path = resolve_table_path(tb_name)
 
-def create_columnvalues(cmd):
+    if not os.path.exists(tb_path):
+        execute_create_new_table(tb_path, cols)
+        return
 
-    # PARSE
+    table, schema, data = load_existing_table(tb_path)
+
+    for col, _ in cols:
+        if col.lower() in (c.lower() for c in schema):
+            error.errorType("LS_306RS")
+            return
+
+    execute_add_columns(schema, data, cols)
+    persist_table(tb_path, table)
+
+    print(f"ADDED {len(cols)} NEW COLUMN(S) TO TABLE '{tb_name}'.")
+
+
+#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Creating Row Values-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
+
+
+def parse_create_rows(cmd):
+
+    if len(cmd) < 4 or cmd[2].lower() != "values":
+        error.errorType("LS_100PR")
+        return None, None
+
     tb_name = cmd[1][1:].strip()
-    tar_dir = os.path.join(state.curr_dir, f"{tb_name}.json")
-    valid_types = ["int", "float", "bool", "string", "null"]
-    raw_values = " ".join(cmd[3:]).strip()
+    raw = " ".join(cmd[3:]).strip()
+
+    if not raw:
+        error.errorType("LS_100PR")
+        return None, None
+
+    return tb_name, raw
+
+
+def parse_row_groups(raw):
 
     rows_raw = []
     current = ""
     inside = False
 
-    # VALIDATE
-    if cmd[2].lower() != "values" or not raw_values:
-        error.errorType("LS_100")
-        return
-
-    if not os.path.exists(tar_dir):
-        error.errorType("LS_302")
-        return
-
-    # PARSE
-    for char in raw_values:
-        if char == '(':
+    for ch in raw:
+        if ch == "(":
             inside = True
             current = ""
-        elif char == ')':
+        elif ch == ")":
             inside = False
             rows_raw.append(current.strip())
         elif inside:
-            current += char
+            current += ch
 
-    parsed_rows = []
-    for raw in rows_raw:
-        vals = [v.strip().strip("'").strip('"') for v in raw.split(",")]
-        parsed_rows.append(vals)
+    if not rows_raw:
+        error.errorType("LS_004PR")
+        return None
 
-    # EXECUTE
-    with open(tar_dir, 'r') as f:
+    parsed = []
+    for r in rows_raw:
+        parsed.append([v.strip().strip("'").strip('"') for v in r.split(",")])
+
+    return parsed
+
+
+def load_table_for_insert(tb_name):
+
+    tb_path = os.path.join(state.curr_dir, f"{tb_name}.json")
+
+    if not os.path.exists(tb_path):
+        error.errorType("LS_302")
+        return None, None, None
+
+    with open(tb_path, "r") as f:
         table = json.load(f)
 
-    schema = table["schema"]
-    data = table["data"]
+    return tb_path, table, table["schema"]
+
+
+def validate_row_lengths(rows, col_count):
+
+    for r in rows:
+        while len(r) < col_count:
+            r.append("")
+
+        if len(r) > col_count:
+            error.errorType("LS_402VD")
+            return False
+
+    return True
+
+
+def cast_value(dtype, val):
+
+    if val == "_" or val == "":
+        return None
+
+    if dtype == "int":
+        return int(val)
+
+    if dtype == "float":
+        return float(val)
+
+    if dtype == "bool":
+        low = val.lower()
+        if low in ("true", "1"):
+            return True
+        if low in ("false", "0"):
+            return False
+        error.errorType("LS_006")
+        raise ValueError
+
+    if dtype == "string":
+        return str(val)
+
+    if dtype == "null":
+        if val.lower() != "null":
+            error.errorType("LS_006")
+            raise ValueError
+        return None
+
+
+def execute_insert_rows(table, rows, schema):
+
     schema_items = list(schema.items())
-    col_count = len(schema_items)
-
     inserted = 0
-    for vals in parsed_rows:
 
-        while len(vals) < col_count:
-            vals.append("")
-
-        if len(vals) > col_count:
-            error.errorType("LS_402")
-            return
-
+    for vals in rows:
         new_row = {}
+
         for (col, dtype), val in zip(schema_items, vals):
-
-            if val == "_" or val == "":
-                new_row[col] = None
-                continue
-
             try:
-                if dtype == valid_types[0]:
-                    new_row[col] = int(val)
-                elif dtype == valid_types[1]:
-                    new_row[col] = float(val)
-                elif dtype == valid_types[2]:
-                    lower = val.lower()
-                    if lower in ("true", "1"):
-                        new_row[col] = True
-                        continue
-                    elif lower in ("false", "0"):
-                        new_row[col] = False
-                        continue
-                    
-                    error.errorType("LS_006")
-                    return
-                elif dtype == "string":
-                    if val is None:
-                        new_row[col] = None
-                        continue
+                new_row[col] = cast_value(dtype, val)
+            except:
+                return False
 
-                    new_row[col] = str(val)
-
-                elif dtype == valid_types[4]:
-                    if val.lower() != "null":
-                        error.errorType("LS_006")
-                        return
-                    new_row[col] = None
-                                
-            except Exception as e:  
-                print(type(e).__name__, e)
-                return
-            
-        data.append(new_row)
+        table["data"].append(new_row)
         inserted += 1
 
-    # PERSIST
-    with open(tar_dir, "w") as f:
+    return inserted
+
+
+def persist_insert_rows(tb_path, table, inserted, tb_name):
+
+    with open(tb_path, "w") as f:
         json.dump(table, f, indent=4)
 
     print(f"INSERTED {inserted} ROW(S) INTO '{tb_name}'.")
 
 
-def create_main(cmd):
+def create_columnvalues(cmd):
+
+    # PARSE
+    parsed = parse_create_rows(cmd)
+    if parsed is None:
+        return
+
+    tb_name, raw = parsed
+
+    rows = parse_row_groups(raw)
+    if rows is None:
+        return
+
+    # LOAD
+    tb_path, table, schema = load_table_for_insert(tb_name)
+    if tb_path is None:
+        return
+
+    schema_items = list(schema.items())
 
     # VALIDATE
+    if not validate_row_lengths(rows, len(schema_items)):
+        return
+
+    # EXECUTE
+    inserted = execute_insert_rows(table, rows, schema)
+    if inserted is False:
+        return
+
+    # PERSIST
+    persist_insert_rows(tb_path, table, inserted, tb_name)
+
+
+#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Creating Main Func.-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
+
+def is_db_create(cmd):
+    return len(cmd) == 2 and not cmd[1].startswith("-")
+
+
+def is_row_insert(cmd):
+    return (len(cmd) >= 3 and cmd[1].startswith("-") and cmd[2].lower() == "values")
+
+
+def is_table_create_or_alter(cmd):
+    return (len(cmd) >= 2 and cmd[1].startswith("-") and (len(cmd) == 2 or cmd[2].lower() != "values"))
+
+
+def create_main(cmd):
+
     if not state.check_state():
         return
 
     try:
-        # PARSE
-        name = cmd[1]
-
-        # VALIDATE
-        if name[0] != "-":
-            if len(cmd) != 2:
-                error.errorType("LS_000")
-                return
-            
-            # EXECUTE + PERSIST
-            create_database(name)
-            return            
+        if is_db_create(cmd):
+            create_database(cmd[1])
+            return
 
         if state.curr_db is None:
             error.errorType("LS_200")
             return
 
-        # PARSE
-        if len(cmd) > 2 and cmd[2].lower() == "values":
+        if is_row_insert(cmd):
             create_columnvalues(cmd)
             return
 
-        create_table(cmd)
-        return
+        if is_table_create_or_alter(cmd):
+            create_table(cmd)
+            return
+
+        error.errorType("LS_000")
 
     except IndexError:
         error.errorType("LS_100")

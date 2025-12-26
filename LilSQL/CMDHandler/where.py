@@ -1,106 +1,111 @@
 from . import error
 
-def where_cmd(command, schema, rows):
 
-    cmd = command
+def parse_where(cmd):
 
     if len(cmd) != 4:
-        error.errorType("LS_000")
-        return []
-
-    try: 
-        c_in = cmd[1]
-        op = cmd[2]
-        raw_val = cmd[3]
-
-    except Exception as e:
-        error.errorType("LS_402")
-        return
-    
-    filtered_rows = []
-    valid_filters = [">", "<", ">=", "=>", "=<", "<=", "==", "!="]
-
-    # VALIDATE
+        error.errorType("LS_000PR")
+        return None, None, None
 
     try:
-
-        if op not in valid_filters:
-            error.errorType("LS_008")
-            return []
-
-        if c_in not in schema:
-            error.errorType("LS_305")
-            return []
-    
+        return cmd[1], cmd[2], cmd[3]
     except:
-        error.errorType("LS_000")
-        return []
+        error.errorType("LS_402PR")
+        return None, None, None
 
-    dtype = schema[c_in]
 
-    # TYPE COERCION
+def resolve_column(col, schema):
+
+    for k in schema:
+        if k.lower() == col.lower():
+            return k
+
+    error.errorType("LS_305RS")
+    return None
+
+
+def coerce_value(dtype, raw):
 
     try:
         match dtype:
             case "int":
-                condition = int(raw_val)
+                return int(raw)
 
             case "float":
-                condition = float(raw_val)
+                return float(raw)
 
             case "bool":
-                low = raw_val.lower()
+                low = raw.lower()
                 if low in ("true", "1"):
-                    condition = True
-                elif low in ("false", "0"):
-                    condition = False
-                else:
-                    error.errorType("LS_401")
+                    return True
+                if low in ("false", "0"):
+                    return False
+                error.errorType("LS_401RS")
+                return None
 
             case "string":
-                condition = str(raw_val)
+                return str(raw)
 
             case "null":
-                if raw_val.lower() != "null":
-                    error.errorType("LS_401")
-                condition = None
+                if raw.lower() != "null":
+                    error.errorType("LS_401RS")
+                    return None
+                return None
 
             case _:
-                error.errorType("LS_401")
-                return []
+                error.errorType("LS_401RS")
+                return None
     except:
-        error.errorType("LS_401")
+        error.errorType("LS_401RS")
+        return None
+
+
+def where_cmd(command, schema, rows):
+
+    col, op, raw_val = parse_where(command)
+    if col is None:
         return []
 
-    # FILTER
+    valid_ops = [">", "<", ">=", "=>", "=<", "<=", "==", "!="]
 
-    for row in range(len(rows)):
-        cell = rows[row][c_in]
+    if op not in valid_ops:
+        error.errorType("LS_008VD")
+        return []
+
+    real_col = resolve_column(col, schema)
+    if real_col is None:
+        return []
+
+    dtype = schema[real_col]
+
+    condition = coerce_value(dtype, raw_val)
+    if condition is None and dtype != "null":
+        return []
+
+    matched = []
+
+    for i, row in enumerate(rows):
+
+        cell = row[real_col]
 
         match op:
             case ">":
                 if cell > condition:
-                    filtered_rows.append(row)
+                    matched.append(i)
             case "<":
                 if cell < condition:
-                    filtered_rows.append(row)
-            case ">=":
+                    matched.append(i)
+            case ">=" | "=>":
                 if cell >= condition:
-                    filtered_rows.append(row)
-            case "=>":
-                if cell >= condition:
-                    filtered_rows.append(row)
-            case "<=":
+                    matched.append(i)
+            case "<=" | "=<":
                 if cell <= condition:
-                    filtered_rows.append(row)
-            case "=<":
-                if cell <= condition:
-                    filtered_rows.append(row)
+                    matched.append(i)
             case "==":
                 if cell == condition:
-                    filtered_rows.append(row)
+                    matched.append(i)
             case "!=":
                 if cell != condition:
-                    filtered_rows.append(row)
+                    matched.append(i)
 
-    return filtered_rows
+    return matched

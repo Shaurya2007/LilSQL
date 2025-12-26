@@ -4,167 +4,262 @@ import state
 from . import error
 from . import where
 
+#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Changing Database Names-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
+
+def parse_update_db(cmd):
+
+    if len(cmd) < 3 or not cmd[2]:
+        error.errorType("LS_100PR")
+        return None
+
+    return cmd[2].strip()
+
+
+def validate_update_db(new_name):
+
+    if state.curr_db is None or state.curr_dir is None:
+        error.errorType("LS_200VD")
+        return None
+
+    old_path = state.curr_dir
+    parent_dir = os.path.dirname(old_path)
+
+    if not os.path.exists(old_path):
+        error.errorType("LS_200VD")
+        return None
+
+    for db in os.listdir(parent_dir):
+        if db.lower() == new_name.lower():
+            error.errorType("LS_301VD")
+            return None
+
+    return old_path, parent_dir
+
+
+def execute_update_db(old_path, parent_dir, new_name):
+
+    new_path = os.path.join(parent_dir, new_name)
+
+    os.rename(old_path, new_path)
+    state.curr_db = new_name
+    state.curr_dir = new_path
+
+    return True
+
 
 def update_db(cmd):
 
     # PARSE
-    old_path = state.curr_dir
-    new_path = os.path.join(os.path.dirname(state.curr_dir), cmd[2])
+    new_name = parse_update_db(cmd)
+    if new_name is None:
+        return
 
     # VALIDATE
-    if state.curr_db is None or state.curr_dir is None:
-        error.errorType("LS_200")
+    result = validate_update_db(new_name)
+    if result is None:
         return
 
-    if len(cmd) < 3 or not cmd[2]:
-        error.errorType("LS_100")
-        return
-    
-    if not os.path.exists(old_path):
-        error.errorType("LS_200")
+    old_path, parent_dir = result
+
+    # EXECUTE
+    if not execute_update_db(old_path, parent_dir, new_name):
         return
 
     # PERSIST
-    os.rename(old_path, new_path)
-    print(f"DATABASE RENAMED TO '{cmd[2]}'.")
-    state.curr_db = cmd[2]
-    state.curr_dir = new_path
+    print("DATABASE RENAMING COMPLETED.")
 
 
-def update_tablename(cmd):
+#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Changing Table Names-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 
-    # PARSE
-    old_tb_names = [table[:-5] for table in os.listdir(state.curr_dir) if table.endswith(".json")]
-    curr_name = " ".join(cmd[3:]).strip()
-    new_tb_names = [v.strip() for v in curr_name.split(",")]
-    invalid_name = ['/','\\',':','*','?','"','<','>','|']
+def parse_update_tablename(cmd):
 
-    # VALIDATE
+    raw = " ".join(cmd[3:]).strip()
+
+    if not raw:
+        error.errorType("LS_100PR")
+        return None
+
+    return [v.strip() for v in raw.split(",")]
+
+
+def validate_update_tablename(new_names):
+
     if state.curr_db is None:
-        error.errorType("LS_200")
-        return
+        error.errorType("LS_200VD")
+        return None
 
-    if len(old_tb_names) < len(new_tb_names):
-        error.errorType("LS_402")
-        return
+    old_tables = [f[:-5] for f in os.listdir(state.curr_dir) if f.endswith(".json")]
 
-    for nm in new_tb_names:
+    if len(new_names) > len(old_tables):
+        error.errorType("LS_402VD")
+        return None
+
+    invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+
+    for nm in new_names:
         if nm == "_":
             continue
-        if any(ch in nm for ch in invalid_name) or nm == "":
-            error.errorType("LS_002")
-            return
+        if nm == "" or any(ch in nm for ch in invalid_chars):
+            error.errorType("LS_002VD")
+            return None
 
-    # EXECUTE + PERSIST
-    for i in range(len(new_tb_names)):
-        new_name = new_tb_names[i]
-        old_name = old_tb_names[i]
+    for nm in new_names:
+        if nm == "_":
+            continue
+        for old in old_tables:
+            if nm.lower() == old.lower():
+                error.errorType("LS_303VD")
+                return None
+
+    return old_tables
+
+
+def execute_update_tablename(old_tables, new_names):
+
+    for i, new_name in enumerate(new_names):
 
         if new_name == "_":
-            continue 
+            continue
+
+        old_name = old_tables[i]
 
         old_path = os.path.join(state.curr_dir, f"{old_name}.json")
         new_path = os.path.join(state.curr_dir, f"{new_name}.json")
 
         if not os.path.exists(old_path):
-            error.errorType("LS_302")
-            return
-
-        if os.path.exists(new_path):
-            error.errorType("LS_303")
-            return
+            error.errorType("LS_302EX")
+            return False
 
         os.rename(old_path, new_path)
         print(f"TABLE RENAMED TO '{new_name}'.")
 
+    return True
+
+
+def update_tablename(cmd):
+
+    # PARSE
+    new_names = parse_update_tablename(cmd)
+    if new_names is None:
+        return
+
+    # VALIDATE
+    old_tables = validate_update_tablename(new_names)
+    if old_tables is None:
+        return
+
+    # EXECUTE
+    if not execute_update_tablename(old_tables, new_names):
+        return
+
+    # PERSIST
     print("TABLE RENAMING COMPLETED.")
 
 
-def update_columnname(cmd):
+#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Changing Column Names-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 
-    # PARSE
-    raw_values = " ".join(cmd[2:])
-    new_col_names = [v.strip() for v in raw_values.split(",")]
+def parse_update_columnname(cmd):
+
+    raw = " ".join(cmd[2:]).strip()
+
+    if not raw:
+        error.errorType("LS_100PR")
+        return None
+
+    if "(" in raw or ")" in raw:
+        error.errorType("LS_003PR")
+        return None
+
+    return [v.strip() for v in raw.split(",")]
+
+
+def validate_update_columnname(new_names):
+
     invalid_chars = set(['/','\\',':','*','?','"',"'",'<','>','|'])
     cleaned = []
     seen = set()
 
-    # VALIDATE
-    if "(" in raw_values or ")" in raw_values:
-        error.errorType("LS_003")
-        return
-    
-    for nm in new_col_names:
-        nm = nm.strip()
+    for nm in new_names:
 
         if nm == "_":
             cleaned.append("_")
             continue
 
         if nm == "" or any(ch in nm for ch in invalid_chars):
-            error.errorType("LS_003")
-            return
+            error.errorType("LS_003VD")
+            return None
 
-        if nm in seen:
-            error.errorType("LS_304")
-            return
+        low = nm.lower()
+        if low in seen:
+            error.errorType("LS_304VD")
+            return None
 
-        seen.add(nm)
+        seen.add(low)
         cleaned.append(nm)
 
-    new_col_names = cleaned
+    return cleaned
+
+
+def load_table_for_column_update(cmd):
 
     tb_name = cmd[1][1:].strip()
     tar_dir = os.path.join(state.curr_dir, f"{tb_name}.json")
 
     if not os.path.exists(tar_dir):
         error.errorType("LS_302")
-        return
+        return None, None, None
 
-    # EXECUTE
-    with open(tar_dir, 'r') as f:
+    with open(tar_dir, "r") as f:
         table = json.load(f)
 
-    schema = table["schema"]
-    data = table["data"]
-    schema_items = list(schema.items()) 
+    return tar_dir, table["schema"], table["data"]
 
-    if len(new_col_names) > len(schema_items):
-        error.errorType("LS_402")
-        return
+
+def execute_update_columnname(schema, data, new_names):
+
+    schema_items = list(schema.items())
+
+    if len(new_names) > len(schema_items):
+        error.errorType("LS_402EX")
+        return None, None
 
     new_schema = {}
+    new_data = []
 
-    for (col, dtype), new_name in zip(schema_items, new_col_names):
+    for (col, dtype), new_name in zip(schema_items, new_names):
         if new_name == "_":
             new_schema[col] = dtype
         else:
             new_schema[new_name] = dtype
 
-    if len(new_col_names) < len(schema_items):
-        for col, dtype in schema_items[len(new_col_names):]:
+    if len(new_names) < len(schema_items):
+        for col, dtype in schema_items[len(new_names):]:
             new_schema[col] = dtype
-
-    new_data = []
 
     for row in data:
         new_row = {}
 
-        for (col, dtype), new_name in zip(schema_items, new_col_names):
+        for (col, _), new_name in zip(schema_items, new_names):
             if new_name == "_":
                 new_row[col] = row[col]
             else:
                 new_row[new_name] = row[col]
 
-        if len(new_col_names) < len(schema_items):
-            for col, dtype in schema_items[len(new_col_names):]:
+        if len(new_names) < len(schema_items):
+            for col, _ in schema_items[len(new_names):]:
                 new_row[col] = row[col]
 
         new_data.append(new_row)
 
-    # PERSIST
-    table["schema"] = new_schema
-    table["data"] = new_data
+    return new_schema, new_data
+
+
+def persist_update_columnname(tar_dir, new_schema, new_data):
+
+    table = {
+        "schema": new_schema,
+        "data": new_data
+    }
 
     with open(tar_dir, "w") as f:
         json.dump(table, f, indent=4)
@@ -172,16 +267,41 @@ def update_columnname(cmd):
     print("COLUMN RENAMING COMPLETED.")
 
 
-def update_columnvalues(cmd):
-
-    # VALIDATE
-    if "where" not in [c.lower() for c in cmd]:
-        error.errorType("LS_000")
-        return
+def update_columnname(cmd):
 
     # PARSE
-    tb_name = cmd[1][1:].strip()
-    tar_dir = os.path.join(state.curr_dir, f"{tb_name}.json")
+    new_names = parse_update_columnname(cmd)
+    if new_names is None:
+        return
+
+    # VALIDATE
+    new_names = validate_update_columnname(new_names)
+    if new_names is None:
+        return
+
+    # LOAD
+    tar_dir, schema, data = load_table_for_column_update(cmd)
+    if tar_dir is None:
+        return
+
+    # EXECUTE
+    result = execute_update_columnname(schema, data, new_names)
+    if result is None:
+        return
+
+    new_schema, new_data = result
+
+    # PERSIST
+    persist_update_columnname(tar_dir, new_schema, new_data)
+
+
+#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Changing Row Values-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
+
+def parse_update_columnvalues(cmd):
+
+    if "where" not in [c.lower() for c in cmd]:
+        error.errorType("LS_000PR")
+        return None
 
     wh_index = [i for i, c in enumerate(cmd) if c.lower() == "where"][0]
 
@@ -189,56 +309,72 @@ def update_columnvalues(cmd):
     where_cmd = cmd[wh_index:]
 
     if not raw_values:
-        error.errorType("LS_103")
-        return
+        error.errorType("LS_103PR")
+        return None
 
-    # PARSE 
     rows_raw = []
     current = ""
     inside = False
 
-    for char in raw_values:
-        if char == "(":
+    for ch in raw_values:
+        if ch == "(":
             inside = True
             current = ""
-        elif char == ")":
+        elif ch == ")":
             inside = False
             rows_raw.append(current.strip())
         elif inside:
-            current += char
+            current += ch
 
     if not rows_raw:
-        error.errorType("LS_004")
-        return
+        error.errorType("LS_004PR")
+        return None
 
     vals = [v.strip().strip("'").strip('"') for v in rows_raw[0].split(",")]
 
+    return vals, where_cmd
+
+
+def load_update_columnvalues(cmd):
+
+    tb_name = cmd[1][1:].strip()
+    tar_dir = os.path.join(state.curr_dir, f"{tb_name}.json")
+
     if not os.path.exists(tar_dir):
         error.errorType("LS_302")
-        return
+        return None, None, None, None
 
-    # LOAD
     with open(tar_dir, "r") as f:
         table = json.load(f)
 
-    schema = table["schema"]
-    data = table["data"]
-    schema_items = list(schema.items())
-             
+    return tar_dir, table["schema"], table["data"], tb_name
+
+
+def validate_update_columnvalues(vals, schema_items):
+
     while len(vals) < len(schema_items):
         vals.append("_")
 
     if len(vals) > len(schema_items):
-        error.errorType("LS_402")
-        return
+        error.errorType("LS_402VD")
+        return None
 
-    rows_to_update = where.where_cmd(where_cmd, schema, data)
+    return vals
 
-    if not rows_to_update:
-        error.errorType("LS_307")
-        return
 
-    # UPDATE
+def resolve_rows_to_update(where_cmd, schema, data):
+
+    rows = where.where_cmd(where_cmd, schema, data)
+
+    if not rows:
+        error.errorType("LS_307RS")
+        return None
+
+    return rows
+
+
+def apply_update_columnvalues(rows_to_update, data, schema_items, vals):
+
     for row_index in rows_to_update:
         row = data[row_index]
 
@@ -262,7 +398,7 @@ def update_columnvalues(cmd):
                         row[col] = False
                     else:
                         error.errorType("LS_401")
-                        return
+                        return False
 
                 elif dtype == "string":
                     row[col] = str(val)
@@ -270,28 +406,87 @@ def update_columnvalues(cmd):
                 elif dtype == "null":
                     if val.lower() != "null":
                         error.errorType("LS_401")
-                        return
+                        return False
                     row[col] = None
 
                 else:
                     error.errorType("LS_401")
-                    return
+                    return False
 
             except:
                 error.errorType("LS_401")
-                return
+                return False
 
-    # PERSIST
+    return True
+
+
+def persist_update_columnvalues(tar_dir, table, rows_updated, tb_name):
+
     with open(tar_dir, "w") as f:
         json.dump(table, f, indent=4)
 
-    print(f"UPDATED {len(rows_to_update)} ROW(S) IN '{tb_name}'.")
+    print(f"UPDATED {rows_updated} ROW(S) IN '{tb_name}'.")
 
+
+def update_columnvalues(cmd):
+
+    # PARSE
+    parsed = parse_update_columnvalues(cmd)
+    if parsed is None:
+        return
+
+    vals, where_cmd = parsed
+
+    # LOAD
+    tar_dir, schema, data, tb_name = load_update_columnvalues(cmd)
+    if tar_dir is None:
+        return
+
+    schema_items = list(schema.items())
+
+    # VALIDATE
+    vals = validate_update_columnvalues(vals, schema_items)
+    if vals is None:
+        return
+
+    # WHERE
+    rows_to_update = resolve_rows_to_update(where_cmd, schema, data)
+    if rows_to_update is None:
+        return
+
+    # UPDATE
+    if not apply_update_columnvalues(rows_to_update, data, schema_items, vals):
+        return
+
+    # PERSIST
+    persist_update_columnvalues(
+        tar_dir,
+        {"schema": schema, "data": data},
+        len(rows_to_update),
+        tb_name
+    )
+
+
+#-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-=-=-Main Func.-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
+
+def is_db_update(cmd):
+    return cmd[1][0] != "-" and len(cmd) == 3
+
+
+def is_tablename_update(cmd):
+    return cmd[1][0] != "-" and len(cmd) >= 4 and cmd[2].lower() == "values"
+
+
+def is_columnname_update(cmd):
+    return cmd[1][0] == "-" and len(cmd) >= 3 and cmd[2].lower() != "values"
+
+
+def is_columnvalue_update(cmd):
+    return cmd[1][0] == "-" and len(cmd) >= 4 and cmd[2].lower() == "values"
 
 
 def update_main(cmd):
 
-    #VALIDATE
     if not state.check_state():
         return
 
@@ -299,17 +494,11 @@ def update_main(cmd):
         error.errorType("LS_200")
         return
 
-    if cmd[1][0] != "-" and cmd[2].lower() != "values":
-        if len(cmd) != 3:
-            error.errorType("LS_000")
-            return
+    if is_db_update(cmd):
         update_db(cmd)
         return
 
-    if cmd[1][0] != "-" and cmd[2].lower() == "values":
-        if len(cmd) < 4:
-            error.errorType("LS_103")
-            return
+    if is_tablename_update(cmd):
         update_tablename(cmd)
         return
 
@@ -317,11 +506,11 @@ def update_main(cmd):
         error.errorType("LS_007")
         return
 
-    if cmd[2].lower() != "values":
+    if is_columnname_update(cmd):
         update_columnname(cmd)
         return
 
-    if cmd[2].lower() == "values":
+    if is_columnvalue_update(cmd):
         update_columnvalues(cmd)
         return
 
