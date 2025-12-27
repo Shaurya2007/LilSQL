@@ -1,13 +1,17 @@
 from router import route
 import state
 import os
+import json
+import logs
 
-def storage_init():
+def local_init():
     target_root = os.getenv("LOCALAPPDATA")
     root_dir = os.path.join(target_root, "LilSQL")
 
     if not os.path.exists(root_dir):
-        os.makedirs(root_dir)
+        os.makedirs(root_dir, exist_ok=True)
+
+    logs.logs_init()
 
 def read_input():
     return input(f"LILSQL({state.curr_db if state.curr_db else ''})=> ")
@@ -30,7 +34,7 @@ def repl_loop():
 
 
 def main():
-    storage_init()
+    local_init()
     print("Welcome to MiniSQL CLI. Type 'exit' or 'quit' to leave.")
     repl_loop()
 

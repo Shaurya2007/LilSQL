@@ -3,6 +3,7 @@ import json
 import state
 from . import error
 from . import where
+from logs import log_entrymain
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Deleting Database-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 
@@ -49,14 +50,45 @@ def delete_database(cmd):
     if not _validate_delete_db(db_name):
         return
 
-    # EXECUTE
-    if not _execute_delete_db():
-        return
+    # EXECUTE + LOG
+    try:
+        if not _execute_delete_db():
+            return
+
+    except Exception as e:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": db_name,
+            "table": None,
+            "phase": "EXECUTE",
+            "status": "FAILED",
+            "action": "DELETE_DATABASE",
+            "before": db_name,
+            "after": None,
+            "where": None,
+            "error": "LS_600EX",
+            "error_detail": f"{type(e).__name__}: {str(e)}"
+        })
+        raise
+
+    else:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": db_name,
+            "table": None,
+            "phase": "EXECUTE",
+            "status": "SUCCESS",
+            "action": "DELETE_DATABASE",
+            "before": db_name,
+            "after": None,
+            "where": None
+        })
 
     # PERSIST
     print(f"DATABASE '{state.curr_db}' DELETED.")
     state.curr_db = None
     state.curr_dir = None
+
 
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Deleting Table-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
@@ -108,9 +140,39 @@ def delete_table(cmd):
     if tb_path is None:
         return
 
-    # EXECUTE
-    if not execute_delete_table(tb_path):
-        return
+    # EXECUTE + LOG
+    try:
+        if not execute_delete_table(tb_path):
+            return
+
+    except Exception as e:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": db_name,
+            "table": tb_name,
+            "phase": "EXECUTE",
+            "status": "FAILED",
+            "action": "DELETE_TABLE",
+            "before": tb_name,
+            "after": None,
+            "where": None,
+            "error": "LS_600EX",
+            "error_detail": f"{type(e).__name__}: {str(e)}"
+        })
+        raise
+
+    else:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": db_name,
+            "table": tb_name,
+            "phase": "EXECUTE",
+            "status": "SUCCESS",
+            "action": "DELETE_TABLE",
+            "before": tb_name,
+            "after": None,
+            "where": None
+        })
 
     # PERSIST
     persist_delete_table(tb_name)
@@ -219,11 +281,42 @@ def delete_columns(cmd):
     if delete_list is None:
         return
 
-    # EXECUTE
-    execute_delete_columns(schema, data, delete_list)
+    before_schema = schema.copy()
 
-    # PERSIST
-    persist_delete_columns(tb_path, table)
+    # EXECUTE + LOG
+    try:
+        execute_delete_columns(schema, data, delete_list)
+        persist_delete_columns(tb_path, table)
+
+    except Exception as e:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": state.curr_db,
+            "table": tb_name,
+            "phase": "EXECUTE",
+            "status": "FAILED",
+            "action": "DELETE_COLUMNS",
+            "before": before_schema,
+            "after": None,
+            "where": None,
+            "error": "LS_600EX",
+            "error_detail": f"{type(e).__name__}: {str(e)}"
+        })
+        raise
+
+    else:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": state.curr_db,
+            "table": tb_name,
+            "phase": "EXECUTE",
+            "status": "SUCCESS",
+            "action": "DELETE_COLUMNS",
+            "before": before_schema,
+            "after": schema,
+            "where": None
+        })
+
 
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Deleting Rows-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
@@ -411,24 +504,89 @@ def delete_row_values(cmd):
         if rows is None:
             return
 
-        execute_where_delete(data, schema_cols, rows, delete_cols)
+        before_rows = [data[i].copy() for i in rows if data[i] is not None]
 
-        table["data"] = [r for r in data if r is not None]
+        try:
+            execute_where_delete(data, schema_cols, rows, delete_cols)
+            table["data"] = [r for r in data if r is not None]
 
-        with open(tb_path, "w") as f:
-            json.dump(table, f, indent=4)
+            with open(tb_path, "w") as f:
+                json.dump(table, f, indent=4)
+
+        except Exception as e:
+            log_entrymain({
+                "command": " ".join(cmd),
+                "db": state.curr_db,
+                "table": tb_name,
+                "phase": "EXECUTE",
+                "status": "FAILED",
+                "action": "DELETE_ROWS_WHERE",
+                "before": before_rows,
+                "after": None,
+                "where": raw,
+                "error": "LS_600EX",
+                "error_detail": f"{type(e).__name__}: {str(e)}"
+            })
+            raise
+
+        else:
+            log_entrymain({
+                "command": " ".join(cmd),
+                "db": state.curr_db,
+                "table": tb_name,
+                "phase": "EXECUTE",
+                "status": "SUCCESS",
+                "action": "DELETE_ROWS_WHERE",
+                "before": before_rows,
+                "after": None,
+                "where": raw
+            })
 
         print("VALUES DELETED.")
         return
 
-    # NO WHERE MODE
+    # NO WHERE MODE (DELETE ALL)
     if raw == "":
-        table["data"] = []
-        with open(tb_path, "w") as f:
-            json.dump(table, f, indent=4)
+        before_rows = table["data"].copy()
+
+        try:
+            table["data"] = []
+            with open(tb_path, "w") as f:
+                json.dump(table, f, indent=4)
+
+        except Exception as e:
+            log_entrymain({
+                "command": " ".join(cmd),
+                "db": state.curr_db,
+                "table": tb_name,
+                "phase": "EXECUTE",
+                "status": "FAILED",
+                "action": "DELETE_ALL_ROWS",
+                "before": before_rows,
+                "after": None,
+                "where": None,
+                "error": "LS_600EX",
+                "error_detail": f"{type(e).__name__}: {str(e)}"
+            })
+            raise
+
+        else:
+            log_entrymain({
+                "command": " ".join(cmd),
+                "db": state.curr_db,
+                "table": tb_name,
+                "phase": "EXECUTE",
+                "status": "SUCCESS",
+                "action": "DELETE_ALL_ROWS",
+                "before": before_rows,
+                "after": None,
+                "where": None
+            })
+
         print("ALL ROWS DELETED.")
         return
 
+    # LITERAL DELETE
     parsed = parse_literal_rows(raw)
     if parsed is None:
         return
@@ -437,14 +595,45 @@ def delete_row_values(cmd):
     if rows is None:
         return
 
-    data[rows[0]] = None
-    table["data"] = [r for r in data if r is not None]
+    before_row = data[rows[0]].copy()
 
-    with open(tb_path, "w") as f:
-        json.dump(table, f, indent=4)
+    try:
+        data[rows[0]] = None
+        table["data"] = [r for r in data if r is not None]
+
+        with open(tb_path, "w") as f:
+            json.dump(table, f, indent=4)
+
+    except Exception as e:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": state.curr_db,
+            "table": tb_name,
+            "phase": "EXECUTE",
+            "status": "FAILED",
+            "action": "DELETE_ROW_LITERAL",
+            "before": [before_row],
+            "after": None,
+            "where": raw,
+            "error": "LS_600EX",
+            "error_detail": f"{type(e).__name__}: {str(e)}"
+        })
+        raise
+
+    else:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": state.curr_db,
+            "table": tb_name,
+            "phase": "EXECUTE",
+            "status": "SUCCESS",
+            "action": "DELETE_ROW_LITERAL",
+            "before": [before_row],
+            "after": None,
+            "where": raw
+        })
 
     print("ROW VALUES DELETED.")
- 
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Deleting Main Func.-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 
