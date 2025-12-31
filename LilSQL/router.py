@@ -5,6 +5,7 @@ from CMDHandler.update import update_main
 from CMDHandler.show import show_main
 from CMDHandler.leave import leave_main
 from CMDHandler.error import errorType
+from CMDHandler.undo import undo_main
 
 
 def len_check(cmd, elen):
@@ -17,7 +18,8 @@ commands = {
     "delete": (delete_main, 2),
     "update": (update_main, 2),
     "show": (show_main, 2),
-    "leave": (leave_main, 1)
+    "leave": (leave_main, 1),
+    "undo": (undo_main, 1)
 }
 
 

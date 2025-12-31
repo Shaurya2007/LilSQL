@@ -424,7 +424,7 @@ def cast_value(dtype, val):
 def execute_insert_rows(table, rows, schema):
 
     schema_items = list(schema.items())
-    inserted = 0
+    insertednum = 0
 
     for vals in rows:
         new_row = {}
@@ -436,17 +436,17 @@ def execute_insert_rows(table, rows, schema):
                 return False
 
         table["data"].append(new_row)
-        inserted += 1
+        insertednum += 1
 
-    return inserted
+    return insertednum, table["data"][-len(rows):]  
 
 
-def persist_insert_rows(tb_path, table, inserted, tb_name):
+def persist_insert_rows(tb_path, table, insertednum, tb_name):
 
     with open(tb_path, "w") as f:
         json.dump(table, f, indent=4)
 
-    print(f"INSERTED {inserted} ROW(S) INTO '{tb_name}'.")
+    print(f"INSERTED {insertednum} ROW(S) INTO '{tb_name}'.")
 
 
 def create_columnvalues(cmd):
@@ -475,11 +475,11 @@ def create_columnvalues(cmd):
 
     # EXECUTE + PERSIST + LOG
     try:
-        inserted = execute_insert_rows(table, rows, schema)
+        insertednum, inserted = execute_insert_rows(table, rows, schema)
         if inserted is False:
             return
 
-        persist_insert_rows(tb_path, table, inserted, tb_name)
+        persist_insert_rows(tb_path, table, insertednum, tb_name)
 
     except Exception as e:
         log_entrymain({

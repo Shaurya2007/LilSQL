@@ -504,7 +504,8 @@ def delete_row_values(cmd):
         if rows is None:
             return
 
-        before_rows = [data[i].copy() for i in rows if data[i] is not None]
+        row_indexes = rows[:]
+        before_rows = [data[i].copy() for i in row_indexes if data[i] is not None]
 
         try:
             execute_where_delete(data, schema_cols, rows, delete_cols)
@@ -522,6 +523,7 @@ def delete_row_values(cmd):
                 "status": "FAILED",
                 "action": "DELETE_ROWS_WHERE",
                 "before": before_rows,
+                "row_indexes": row_indexes,
                 "after": None,
                 "where": raw,
                 "error": "LS_600EX",
@@ -538,6 +540,7 @@ def delete_row_values(cmd):
                 "status": "SUCCESS",
                 "action": "DELETE_ROWS_WHERE",
                 "before": before_rows,
+                "row_indexes": row_indexes,
                 "after": None,
                 "where": raw
             })
@@ -595,10 +598,11 @@ def delete_row_values(cmd):
     if rows is None:
         return
 
-    before_row = data[rows[0]].copy()
+    index = rows[0]
+    before_row = data[index].copy()
 
     try:
-        data[rows[0]] = None
+        data[index] = None
         table["data"] = [r for r in data if r is not None]
 
         with open(tb_path, "w") as f:
@@ -613,6 +617,7 @@ def delete_row_values(cmd):
             "status": "FAILED",
             "action": "DELETE_ROW_LITERAL",
             "before": [before_row],
+            "row_indexes": [index],
             "after": None,
             "where": raw,
             "error": "LS_600EX",
@@ -629,11 +634,13 @@ def delete_row_values(cmd):
             "status": "SUCCESS",
             "action": "DELETE_ROW_LITERAL",
             "before": [before_row],
+            "row_indexes": [index],
             "after": None,
             "where": raw
         })
 
     print("ROW VALUES DELETED.")
+
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Deleting Main Func.-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 
