@@ -1,0 +1,63 @@
+import os
+import json
+import datetime
+
+logs_dir = os.path.join(os.getenv("LOCALAPPDATA"),"LilSQL", "Logs")
+
+def logs_init():
+    os.makedirs(logs_dir, exist_ok=True)
+
+    user_log = os.path.join(logs_dir, "user.logs")
+    meta_file = os.path.join(logs_dir, "engine.meta")
+
+    if not os.path.exists(user_log):
+        open(user_log, "a").close()
+
+    if not os.path.exists(meta_file):
+        meta = {
+            "prev_log_id": 0,
+            "undo_cursor": 0
+        }
+        with open(meta_file, "w") as f:
+            json.dump(meta, f, indent=4)
+
+
+def log_entryid():
+
+    meta_file = os.path.join(logs_dir, "engine.meta")
+    with open(meta_file, "r") as f:
+        meta = json.load(f)
+
+    log_id = meta["prev_log_id"] + 1
+    meta["prev_log_id"] = log_id
+
+    with open(meta_file, "w") as f:
+        json.dump(meta, f)
+
+    return log_id
+
+def log_entrytime():
+
+    return datetime.datetime.now().isoformat(timespec="seconds")
+
+def log_entrymain(entry: dict):
+    meta_file = os.path.join(logs_dir, "engine.meta")
+    user_log = os.path.join(logs_dir, "user.logs")
+
+    with open(meta_file, "r") as f:
+        meta = json.load(f)
+
+    meta["prev_log_id"] += 1
+    log_id = meta["prev_log_id"]
+
+    meta["undo_cursor"] += 1
+
+    entry["log_id"] = log_id
+    entry["timestamp"] = datetime.datetime.now().isoformat(timespec="seconds")
+
+    with open(user_log, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+    with open(meta_file, "w") as f:
+        json.dump(meta, f, indent=4)
+
