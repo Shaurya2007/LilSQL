@@ -1,29 +1,3 @@
-# Example log entry structure:
-#
-# {
-#   "log_id": 184,
-#   "timestamp": "2025-01-03T22:41:09",
-#   "command": "update -users values (_,Alice) where id == 1",
-
-#   "db": "testDB",
-#   "table": "users",
-
-#   "phase": "EXECUTE",
-#   "status": "SUCCESS",
-
-#   "action": "UPDATE",
-
-#   "before": [
-#     { "id": 1, "name": "Bob", "age": 22 }
-#   ],
-
-#   "after": [
-#     { "id": 1, "name": "Alice", "age": 22 }
-#   ],
-
-#   "where": "id == 1"
-# }
-
 import os
 import json
 import datetime
