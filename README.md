@@ -1,203 +1,85 @@
-# LilSQL v0.8.3 — Modular Core & Persistent Runtime
+# LilSQL v0.8.4_01 — Logging & Undo Engine (Foundation)
 
-![version](https://img.shields.io/badge/version-v0.8.3-blue)
+![version](https://img.shields.io/badge/version-v0.8.4__01-blue)
 ![python](https://img.shields.io/badge/python-3.8%2B-yellow)
 ![status](https://img.shields.io/badge/status-Experimental-orange)
 
-LilSQL is a lightweight, JSON-powered mini SQL engine built entirely in Python.
+LilSQL v0.8.4_01 introduces a **fully structured logging system** and a **deterministic undo engine**, forming the foundation for safe state recovery and future redo support.
 
-It is **not a SQL clone**.  
-It is **my interpretation** of a database engine,
-designed to be explicit, safe, debuggable, and human-readable.
+This release focuses on **correctness, explicit behavior, and invariant safety**, not user-facing convenience.
 
 ---
 
-## What’s New in v0.8.3
+## What’s New in v0.8.4_01
 
-- Full **command modularization** across CREATE, UPDATE, DELETE, SHOW
-- Centralized and safer **state management**
-- Improved **error code clarity with execution-phase awareness**
-- Runtime storage decoupled from executable location
-- Cleaner routing and handler responsibilities
-## Core Commands
-
-LilSQL uses a compact, custom syntax:
-
-- `create` — databases, tables, schemas, rows
-- `use` — connect to a database
-- `leave` — disconnect
-- `show` — display table data
-- `update` — modify column values (WHERE-based)
-- `delete` — delete rows or column values
-
-All commands are **case-insensitive**.
+### 🔐 Structured Logging Engine
+- Centralized, append-only command logging
+- Each successful mutation produces a single immutable log entry
+- Logs include:
+  - command
+  - database & table scope
+  - action type
+  - before / after snapshots (where applicable)
+  - execution phase metadata
+- Log format designed explicitly to support undo & future redo
 
 ---
 
-## Features
-
-### Database Management
-
-```
-create mydb
-use mydb
-leave
-delete mydb
-```
-
----
-
-### Table Creation
-```
-create -users id:int,name:string,age:int,active:bool
-```
+### ⏪ Undo Engine (Core Implementation)
+- Deterministic undo for **all mutating commands**
+- Undo restores engine state using logged snapshots, not recomputation
+- Supports:
+  - CREATE (database, table, rows)
+  - DELETE (database, table, columns, rows)
+  - UPDATE (database name, table name, column name, row values)
+- Undo semantics are **explicit and bounded**
+- Undo history collapses after execution (redo not yet implemented)
 
 ---
 
-### Insert Rows
-```
-create -users values (1,alice,18,true),(2,bob,20,false)
-```
+### 🧠 Explicit Undo Semantics
+- Undo guarantees **state consistency**, not full data recovery
+- Destructive operations follow **force-style semantics**
+- Only data explicitly logged is recoverable
+- Prevents “ghost undo” and timeline paradoxes
 
 ---
 
-### Show Data (WITH WHERE)
-```
-show -users
-show -users (id,name)
-show -users where age > 18
-show -users (id,name) where active == true
-```
-
-Rules:
-- Column list is optional
-- WHERE filters rows
-- Output is auto-formatted
+### 📍 Cursor-Based Undo Control
+- Engine maintains an undo counter representing available undo steps
+- Each successful mutation increments undo availability
+- Executing undo resets undo history (redo planned for later builds)
+- Prevents re-undoing already reverted operations
 
 ---
 
-### Update Data (WHERE required)
-```
-update -users values (_,Alice_New) where id == 1
-update -users values (_,Anon) where name == alice
-update -users values (_,_,25,_) where age < 20
-```
-
-Rules:
-- `WHERE` is mandatory
-- `_` or empty skips a column
-- Multiple rows matching WHERE are updated intentionally
-- Schema is never modified
-- `all` updates every row
+### 🧱 Invariant-Safe Design
+- Undo never depends on runtime state
+- All recovery is log-driven
+- Schema and row data are always restored to a valid state
+- No partial or ambiguous restoration paths
 
 ---
 
-### Delete Data
-
-#### Literal delete (NO WHERE)
-```
-delete -users values (1,_)
-```
-
-Rules:
-- Deletes exactly one matching row
-- Multiple matches cause an error
-- Used for precise, surgical deletes
+## Important Notes
+- Recursive / force delete flags are **planned** but not implemented yet
+- This release lays the groundwork for:
+  - force delete (`-f`)
+  - redo support
+  - checkpointing
+- Logging format is considered **stable** going forward
 
 ---
 
-#### Conditional delete (WITH WHERE)
-```
-delete -users values name where age > 25
-delete -users values id,name where active == false
-delete -users values all where id == 5
-```
-
-Rules:
-- WHERE implies intentional bulk operation
-- Column list decides deletion scope
-- `all` deletes entire rows
-- Partial columns are set to `null`
-- Schema is never touched
+## Versioning Notes
+- v0.8.4 is split into incremental internal builds:
+  - **v0.8.4_01** — Logging & Undo foundation
+  - **v0.8.4_02** — Force delete semantics (planned)
+  - **v0.8.4_03** — Redo engine (planned)
+- These builds collectively form the v0.8.4 milestone
 
 ---
 
-### WHERE Conditions
-
-Supported operators:
-```
->   <   >=   <=   ==   !=
-```
-
-Supported data types:
-- `int`
-- `float`
-- `bool`
-- `string`
-- `null`
-
----
-
-## Folder Structure
-
-```
-LilSQL/
-│── CMDHandler/
-│   ├── create.py
-│   ├── update.py
-│   ├── delete.py
-│   ├── where.py
-│   ├── show.py
-│   ├── use.py
-│   └── error.py
-│── state.py
-│── router.py
-│── cli.py
-```
-
-Databases are now stored in LocalAppdata 
-
----
-
-## Version History
-
-### v0.8.3 (Current)
-- Full modular refactor
-- Case-insensitive command language
-- Centralized state management
-- Persistent runtime directory
-- Error code phase tagging
-- Prepared architecture for undo & logging
-
-### v0.8.2
-- WHERE support for SHOW, UPDATE, and DELETE
-- Unified condition engine
-- Clear and safe mutation semantics
-- Ambiguous delete protection
-- Column-aware updates and deletes
-
-### v0.8.1
-- Error normalization
-- State invariant enforcement
-- Guard-clause refactor
-
-### v0.8.0
-- Initial public release
-- Custom SQL-like engine
-- CLI interface
-- JSON-based storage
-
----
-
-## Roadmap
-
-### v0.8.x
-- Additional WHERE operators (`AND`, `OR`, `LIKE`, `BETWEEN`)
-- Internal cleanup and optimization
-
-### v0.9.x
-- Constraints
-- Schema-level validation
-
-### v1.0
-- Full OOP rewrite
+## Status
+This release is **experimental** but architecturally complete for its scope.  
+It prioritizes correctness and explicit behavior over convenience.

@@ -3,6 +3,7 @@ import json
 import state
 from . import error
 from . import where
+from logs import log_entrymain
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Changing Database Names-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 
@@ -60,13 +61,44 @@ def update_db(cmd):
         return
 
     old_path, parent_dir = result
+    old_name = os.path.basename(old_path)
 
-    # EXECUTE
-    if not execute_update_db(old_path, parent_dir, new_name):
-        return
+    # EXECUTE + LOG
+    try:
+        if not execute_update_db(old_path, parent_dir, new_name):
+            return
 
-    # PERSIST
+    except Exception as e:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": old_name,
+            "table": None,
+            "phase": "EXECUTE",
+            "status": "FAILED",
+            "action": "UPDATE_DATABASE_NAME",
+            "before": old_name,
+            "after": None,
+            "where": None,
+            "error": "LS_600EX",
+            "error_detail": f"{type(e).__name__}: {str(e)}"
+        })
+        raise
+
+    else:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": new_name,
+            "table": None,
+            "phase": "EXECUTE",
+            "status": "SUCCESS",
+            "action": "UPDATE_DATABASE_NAME",
+            "before": old_name,
+            "after": new_name,
+            "where": None
+        })
+
     print("DATABASE RENAMING COMPLETED.")
+
 
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Changing Table Names-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
@@ -148,12 +180,42 @@ def update_tablename(cmd):
     if old_tables is None:
         return
 
-    # EXECUTE
-    if not execute_update_tablename(old_tables, new_names):
-        return
+    # EXECUTE + LOG
+    try:
+        if not execute_update_tablename(old_tables, new_names):
+            return
 
-    # PERSIST
+    except Exception as e:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": state.curr_db,
+            "table": None,
+            "phase": "EXECUTE",
+            "status": "FAILED",
+            "action": "UPDATE_TABLE_NAME",
+            "before": old_tables,
+            "after": None,
+            "where": None,
+            "error": "LS_600EX",
+            "error_detail": f"{type(e).__name__}: {str(e)}"
+        })
+        raise
+
+    else:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": state.curr_db,
+            "table": None,
+            "phase": "EXECUTE",
+            "status": "SUCCESS",
+            "action": "UPDATE_TABLE_NAME",
+            "before": old_tables,
+            "after": new_names,
+            "where": None
+        })
+
     print("TABLE RENAMING COMPLETED.")
+
 
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Changing Column Names-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
@@ -284,15 +346,45 @@ def update_columnname(cmd):
     if tar_dir is None:
         return
 
-    # EXECUTE
-    result = execute_update_columnname(schema, data, new_names)
-    if result is None:
-        return
+    before_schema = schema.copy()
 
-    new_schema, new_data = result
+    # EXECUTE + LOG
+    try:
+        result = execute_update_columnname(schema, data, new_names)
+        if result is None:
+            return
 
-    # PERSIST
-    persist_update_columnname(tar_dir, new_schema, new_data)
+        new_schema, new_data = result
+        persist_update_columnname(tar_dir, new_schema, new_data)
+
+    except Exception as e:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": state.curr_db,
+            "table": os.path.basename(tar_dir)[:-5],
+            "phase": "EXECUTE",
+            "status": "FAILED",
+            "action": "UPDATE_COLUMN_NAME",
+            "before": before_schema,
+            "after": None,
+            "where": None,
+            "error": "LS_600EX",
+            "error_detail": f"{type(e).__name__}: {str(e)}"
+        })
+        raise
+
+    else:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": state.curr_db,
+            "table": os.path.basename(tar_dir)[:-5],
+            "phase": "EXECUTE",
+            "status": "SUCCESS",
+            "action": "UPDATE_COLUMN_NAME",
+            "before": before_schema,
+            "after": new_schema,
+            "where": None
+        })
 
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Changing Row Values-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
@@ -454,17 +546,50 @@ def update_columnvalues(cmd):
     if rows_to_update is None:
         return
 
-    # UPDATE
-    if not apply_update_columnvalues(rows_to_update, data, schema_items, vals):
-        return
+    before_rows = [data[i].copy() for i in rows_to_update]
 
-    # PERSIST
-    persist_update_columnvalues(
-        tar_dir,
-        {"schema": schema, "data": data},
-        len(rows_to_update),
-        tb_name
-    )
+    # EXECUTE + LOG
+    try:
+        if not apply_update_columnvalues(rows_to_update, data, schema_items, vals):
+            return
+
+        persist_update_columnvalues(
+            tar_dir,
+            {"schema": schema, "data": data},
+            len(rows_to_update),
+            tb_name
+        )
+
+    except Exception as e:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": state.curr_db,
+            "table": tb_name,
+            "phase": "EXECUTE",
+            "status": "FAILED",
+            "action": "UPDATE_ROWS",
+            "before": before_rows,
+            "after": None,
+            "where": where_cmd,
+            "error": "LS_600EX",
+            "error_detail": f"{type(e).__name__}: {str(e)}"
+        })
+        raise
+
+    else:
+        after_rows = [data[i] for i in rows_to_update]
+
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": state.curr_db,
+            "table": tb_name,
+            "phase": "EXECUTE",
+            "status": "SUCCESS",
+            "action": "UPDATE_ROWS",
+            "before": before_rows,
+            "after": after_rows,
+            "where": where_cmd
+        })
 
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-=-=-Main Func.-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#

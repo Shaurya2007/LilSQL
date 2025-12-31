@@ -1,4 +1,4 @@
-# PR; VD; EX; PS; RS (RESOLVE ERROR)
+# PR; VD; EX; PS; RS (RESOLVE ERROR), UN (UNDO)
 
 #Error LS_0XX
 def invalid_cmd(code,num):

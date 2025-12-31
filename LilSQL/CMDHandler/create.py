@@ -2,6 +2,7 @@ import os
 import json
 import state
 from . import error
+from logs import log_entrymain
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Creating Database-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 
@@ -61,12 +62,45 @@ def create_database(db_name):
     # RESOLVE ROOT
     db_root = resolve_db_root()
 
-    # VALIDATE UNIQUENESS (CASE-INSENSITIVE)
+    # VALIDATE UNIQUENESS
     if not validate_db_uniqueness(db_root, db_name):
         return
 
-    # EXECUTE
-    execute_create_database(db_root, db_name)
+    # EXECUTE + LOG
+    try:
+        execute_create_database(db_root, db_name)
+
+    except Exception as e:
+        # FAILURE LOG (EXECUTE PHASE)
+        log_entrymain({
+            "command": f"create database {db_name}",
+            "db": db_name,
+            "table": None,
+            "phase": "EXECUTE",
+            "status": "FAILED",
+            "action": "CREATE_DATABASE",
+            "before": None,
+            "after": None,
+            "where": None,
+            "error": "LS_600EX",
+            "error_detail": f"{type(e).__name__}: {str(e)[:200]}"   
+        })
+        raise
+
+    else:
+        # SUCCESS LOG
+        log_entrymain({
+            "command": f"create database {db_name}",
+            "db": db_name,
+            "table": None,
+            "phase": "EXECUTE",
+            "status": "SUCCESS",
+            "action": "CREATE_DATABASE",
+            "before": None,
+            "after": None,
+            "where": None
+        })
+
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Creating Tables-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
 
@@ -203,10 +237,42 @@ def create_table(cmd):
     # RESOLVE PATH
     tb_path = resolve_table_path(tb_name)
 
+    # CASE 1: CREATE NEW TABLE
     if not os.path.exists(tb_path):
-        execute_create_new_table(tb_path, cols)
-        return
+        try:
+            execute_create_new_table(tb_path, cols)
 
+        except Exception as e:
+            log_entrymain({
+                "command": " ".join(cmd),
+                "db": state.curr_db,
+                "table": tb_name,
+                "phase": "EXECUTE",
+                "status": "FAILED",
+                "action": "CREATE_TABLE",
+                "before": None,
+                "after": None,
+                "where": None,
+                "error": "LS_600EX",
+                "error_detail": f"{type(e).__name__}: {str(e)}"
+            })
+            raise
+
+        else:
+            log_entrymain({
+                "command": " ".join(cmd),
+                "db": state.curr_db,
+                "table": tb_name,
+                "phase": "EXECUTE",
+                "status": "SUCCESS",
+                "action": "CREATE_TABLE",
+                "before": None,
+                "after": {col: dtype for col, dtype in cols},
+                "where": None
+            })
+            return
+
+    # CASE 2: ADD COLUMNS TO EXISTING TABLE
     table, schema, data = load_existing_table(tb_path)
 
     for col, _ in cols:
@@ -214,8 +280,40 @@ def create_table(cmd):
             error.errorType("LS_306RS")
             return
 
-    execute_add_columns(schema, data, cols)
-    persist_table(tb_path, table)
+    before_schema = schema.copy()
+
+    try:
+        execute_add_columns(schema, data, cols)
+        persist_table(tb_path, table)
+
+    except Exception as e:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": state.curr_db,
+            "table": tb_name,
+            "phase": "EXECUTE",
+            "status": "FAILED",
+            "action": "ALTER_TABLE_ADD_COLUMNS",
+            "before": before_schema,
+            "after": None,
+            "where": None,
+            "error": "LS_600EX",
+            "error_detail": f"{type(e).__name__}: {str(e)}"
+        })
+        raise
+
+    else:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": state.curr_db,
+            "table": tb_name,
+            "phase": "EXECUTE",
+            "status": "SUCCESS",
+            "action": "ALTER_TABLE_ADD_COLUMNS",
+            "before": before_schema,
+            "after": schema,
+            "where": None
+        })
 
     print(f"ADDED {len(cols)} NEW COLUMN(S) TO TABLE '{tb_name}'.")
 
@@ -326,7 +424,7 @@ def cast_value(dtype, val):
 def execute_insert_rows(table, rows, schema):
 
     schema_items = list(schema.items())
-    inserted = 0
+    insertednum = 0
 
     for vals in rows:
         new_row = {}
@@ -338,17 +436,17 @@ def execute_insert_rows(table, rows, schema):
                 return False
 
         table["data"].append(new_row)
-        inserted += 1
+        insertednum += 1
 
-    return inserted
+    return insertednum, table["data"][-len(rows):]  
 
 
-def persist_insert_rows(tb_path, table, inserted, tb_name):
+def persist_insert_rows(tb_path, table, insertednum, tb_name):
 
     with open(tb_path, "w") as f:
         json.dump(table, f, indent=4)
 
-    print(f"INSERTED {inserted} ROW(S) INTO '{tb_name}'.")
+    print(f"INSERTED {insertednum} ROW(S) INTO '{tb_name}'.")
 
 
 def create_columnvalues(cmd):
@@ -375,13 +473,42 @@ def create_columnvalues(cmd):
     if not validate_row_lengths(rows, len(schema_items)):
         return
 
-    # EXECUTE
-    inserted = execute_insert_rows(table, rows, schema)
-    if inserted is False:
-        return
+    # EXECUTE + PERSIST + LOG
+    try:
+        insertednum, inserted = execute_insert_rows(table, rows, schema)
+        if inserted is False:
+            return
 
-    # PERSIST
-    persist_insert_rows(tb_path, table, inserted, tb_name)
+        persist_insert_rows(tb_path, table, insertednum, tb_name)
+
+    except Exception as e:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": state.curr_db,
+            "table": tb_name,
+            "phase": "EXECUTE",
+            "status": "FAILED",
+            "action": "INSERT",
+            "before": None,
+            "after": None,
+            "where": None,
+            "error": "LS_600EX",
+            "error_detail": f"{type(e).__name__}: {str(e)}"
+        })
+        raise
+
+    else:
+        log_entrymain({
+            "command": " ".join(cmd),
+            "db": state.curr_db,
+            "table": tb_name,
+            "phase": "EXECUTE",
+            "status": "SUCCESS",
+            "action": "INSERT",
+            "before": None,
+            "after": inserted,
+            "where": None
+        })
 
 
 #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-=-Creating Main Func.-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=#
