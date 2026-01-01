@@ -12,7 +12,7 @@ This release focuses on **correctness, explicit behavior, and invariant safety**
 
 ## What’s New in v0.8.4_01
 
-### 🔐 Structured Logging Engine
+### Structured Logging Engine
 - Centralized, append-only command logging
 - Each successful mutation produces a single immutable log entry
 - Logs include:
@@ -25,7 +25,7 @@ This release focuses on **correctness, explicit behavior, and invariant safety**
 
 ---
 
-### ⏪ Undo Engine (Core Implementation)
+###  Undo Engine (Core Implementation)
 - Deterministic undo for **all mutating commands**
 - Undo restores engine state using logged snapshots, not recomputation
 - Supports:
@@ -37,7 +37,7 @@ This release focuses on **correctness, explicit behavior, and invariant safety**
 
 ---
 
-### 🧠 Explicit Undo Semantics
+###  Explicit Undo Semantics
 - Undo guarantees **state consistency**, not full data recovery
 - Destructive operations follow **force-style semantics**
 - Only data explicitly logged is recoverable
@@ -45,7 +45,7 @@ This release focuses on **correctness, explicit behavior, and invariant safety**
 
 ---
 
-### 📍 Cursor-Based Undo Control
+###  Cursor-Based Undo Control
 - Engine maintains an undo counter representing available undo steps
 - Each successful mutation increments undo availability
 - Executing undo resets undo history (redo planned for later builds)
@@ -53,7 +53,7 @@ This release focuses on **correctness, explicit behavior, and invariant safety**
 
 ---
 
-### 🧱 Invariant-Safe Design
+###  Invariant-Safe Design
 - Undo never depends on runtime state
 - All recovery is log-driven
 - Schema and row data are always restored to a valid state
